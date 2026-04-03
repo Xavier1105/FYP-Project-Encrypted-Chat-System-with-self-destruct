@@ -54,6 +54,35 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $stmt->close();
         }
     }
+
+// ==========================================
+    // NEW: HANDLE PASSWORD RESET REQUEST (MODAL UI)
+    // ==========================================
+    if (isset($_POST['reset_user_password']) && isset($_POST['target_user_id'])) {
+        $target_id = intval($_POST['target_user_id']);
+        
+        // Generate temporary password
+        $random_pin = rand(1000, 9999);
+        $temp_password = "Temp-" . $random_pin . "!";
+        
+        // Hash it for the database
+        $hashed_password = password_hash($temp_password, PASSWORD_DEFAULT);
+        
+        $stmt = $conn->prepare("UPDATE users SET password_hash = ? WHERE user_id = ?");
+        $stmt->bind_param("si", $hashed_password, $target_id);
+        
+        if ($stmt->execute()) {
+            // INSTEAD OF AN ALERT, SET FLAGS TO TRIGGER THE MODAL
+            $show_password_modal = true;
+            $generated_temp_password = $temp_password;
+            
+            // Set the dashboard alert banner as a background confirmation
+            $message = "<div class='alert alert-warning alert-dismissible fade show' role='alert' id='autoDismissAlert'><i class='bi bi-key-fill me-2'></i> Officer's password has been temporarily reset.<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+        } else {
+            $message = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>Error: Could not reset password.</div>";
+        }
+        $stmt->close();
+    }
 }
 
 // 3. FETCH DATA (Admin Dashboard Stats)
@@ -453,6 +482,59 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
             /* Darker Red on hover */
         }
 
+        /* Custom Teal Button */
+        .btn-teal {
+            background-color: #1abc9c;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+        .btn-teal:hover {
+            background-color: #16a085;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(26, 188, 156, 0.3);
+        }
+
+        /* Modal Custom Styling */
+        .modal-header-teal {
+            background-color: #1abc9c;
+            color: white;
+            border-top-left-radius: 0.5rem;
+            border-top-right-radius: 0.5rem;
+        }
+        .password-display-box {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            /* This creates the soft glowing teal shadow around the box */
+            box-shadow: 0 0 25px rgba(26, 188, 156, 0.25); 
+            position: relative;
+        }
+        .warning-box {
+            background-color: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            color: #92400e;
+        }
+
+        /* Custom Crimson Button (For Revoke Access) */
+        .btn-crimson {
+            background-color: #ef4444; /* Modern soft red */
+            color: white;
+            border: none;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+        .btn-crimson:hover {
+            background-color: #dc2626; /* Darker red on hover */
+            color: white;
+            transform: translateY(-2px); /* Lifts the button up */
+            box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3); /* Red glowing shadow */
+        }
+
         /* ========================================= */
     </style>
 </head>
@@ -718,14 +800,23 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
                                                     <?php if ($row['user_id'] == $_SESSION['user_id']): ?>
                                                         <span class="badge bg-secondary px-3 py-2">You</span>
                                                     <?php elseif ($row['role'] === 'hos' && $_SESSION['role'] !== 'hos'): ?>
-                                                        <button class="btn btn-outline-secondary btn-sm" disabled title="Requires HOS Authorization to Revoke">
+                                                        <button class="btn btn-outline-secondary btn-sm" disabled title="Requires HOS Authorization to Modify">
                                                             <i class="bi bi-lock-fill"></i> Restricted
                                                         </button>
                                                     <?php else: ?>
                                                         <form method="POST" class="d-inline" onsubmit="return confirm('Revoke access for this officer?');">
                                                             <input type="hidden" name="target_user_id" value="<?php echo $row['user_id']; ?>">
                                                             <input type="hidden" name="action" value="delete">
-                                                            <button type="submit" class="btn btn-outline-danger btn-sm">Revoke Access</button>
+                                                            <button type="submit" class="btn btn-crimson btn-sm fw-bold px-3">
+                                                                <i class="bi bi-person-x-fill me-1"></i> Revoke Access
+                                                            </button>
+                                                        </form>
+                                                        
+                                                        <form method="POST" action="admin_dashboard.php" class="d-inline ms-1">
+                                                            <input type="hidden" name="target_user_id" value="<?php echo $row['user_id']; ?>">
+                                                            <button type="submit" name="reset_user_password" class="btn btn-teal btn-sm fw-bold px-3" onclick="return confirm('Are you sure you want to reset this user\'s password?');">
+                                                                <i class="bi bi-key me-1"></i> Reset Password
+                                                            </button>
                                                         </form>
                                                     <?php endif; ?>
                                                 </td>
@@ -984,6 +1075,72 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
             </div>
         </div>
     </div>
+
+    <?php if (isset($show_password_modal) && $show_password_modal === true): ?>
+    <div class="modal fade" id="tempPasswordModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 0.5rem;">
+                
+                <div class="modal-header modal-header-teal border-bottom-0">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-shield-check me-2"></i> Password Reset Successful
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                
+                <div class="modal-body px-4 py-4">
+                    <p class="text-muted mb-4 text-center">Please provide the officer with their new temporary password:</p>
+
+                    <div class="password-display-box mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-secondary fw-bold" style="font-size: 0.75rem; letter-spacing: 0.5px;">TEMPORARY PASSWORD</span>
+                            
+                            <button type="button" class="btn btn-sm btn-light border d-flex align-items-center fw-bold text-secondary" onclick="copyTempPassword()" id="copyBtn">
+                                <i class="bi bi-copy me-1"></i> Copy
+                            </button>
+                        </div>
+                        <h2 class="mb-0 fw-bold" style="color: #1abc9c; letter-spacing: 1px;" id="tempPasswordText">
+                            <?php echo htmlspecialchars($generated_temp_password); ?>
+                        </h2>
+                    </div>
+
+                    <div class="warning-box p-3 mb-4 d-flex align-items-start">
+                        <i class="bi bi-exclamation-circle text-warning fs-5 me-3 mt-1"></i>
+                        <div>
+                            <strong style="color: #b45309;">Action Required</strong>
+                            <p class="mb-0 mt-1" style="font-size: 0.9rem;">Remind the officer to update this password in their profile settings immediately after logging in.</p>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-teal w-100 fw-bold py-2 rounded-3" data-bs-dismiss="modal" style="font-size: 1.05rem;">
+                        I have copied the password
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var myModal = new bootstrap.Modal(document.getElementById('tempPasswordModal'));
+            myModal.show();
+        });
+
+        // Function to copy text to clipboard
+        function copyTempPassword() {
+            var passwordText = document.getElementById('tempPasswordText').innerText;
+            navigator.clipboard.writeText(passwordText).then(function() {
+                var copyBtn = document.getElementById('copyBtn');
+                // Change button to show success
+                copyBtn.innerHTML = '<i class="bi bi-check2 text-success me-1"></i> Copied!';
+                // Change it back after 2 seconds
+                setTimeout(function() {
+                    copyBtn.innerHTML = '<i class="bi bi-copy me-1"></i> Copy';
+                }, 2000);
+            });
+        }
+    </script>
+    <?php endif; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
