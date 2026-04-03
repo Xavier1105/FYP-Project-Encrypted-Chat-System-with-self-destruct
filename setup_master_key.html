@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate Master Audit Key</title>
+</head>
+<body style="font-family: Arial; padding: 50px; text-align: center;">
+    <h2>Sentinel - Cold Storage Key Generator</h2>
+    <p>Run this ONCE to generate the permanent Master Keys for the Audit Log.</p>
+    <button onclick="generateMasterKeys()" style="padding: 15px; background: red; color: white; border: none; font-weight: bold; cursor: pointer;">Generate Master Key Pair</button>
+    <br><br>
+    <textarea id="pubKeyOutput" rows="5" cols="80" placeholder="Your Master PUBLIC Key will appear here..." readonly></textarea>
+
+    <script>
+        async function generateMasterKeys() {
+            const keyPair = await window.crypto.subtle.generateKey(
+                { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+                true, ["encrypt", "decrypt"]
+            );
+
+            // Export Keys
+            const pubExp = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
+            const privExp = await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+            
+            const pubBase64 = btoa(String.fromCharCode(...new Uint8Array(pubExp)));
+            const privBase64 = btoa(String.fromCharCode(...new Uint8Array(privExp)));
+
+            // 1. Display Public Key on screen
+            document.getElementById('pubKeyOutput').value = pubBase64;
+
+            // 2. Download Private Key as JSON
+            const backupData = JSON.stringify({
+                system: "Sentinel Master Audit Vault",
+                private_key: privBase64,
+                generated_at: new Date().toISOString()
+            }, null, 4);
+
+            const blob = new Blob([backupData], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `MASTER_AUDIT_PRIVATE_KEY.json`;
+            a.click();
+            
+            alert("SUCCESS! Save the downloaded JSON to a physical USB drive, and copy the Public Key from the text box!");
+        }
+    </script>
+</body>
+</html>
