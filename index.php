@@ -820,10 +820,13 @@ $stmt_info->close();
             </div>
         </div>
         <div class="d-flex align-items-center">
-            <span class="badge bg-dark border border-secondary me-3 shadow-sm" style="font-family: monospace; letter-spacing: 1px; padding: 0.5rem 0.75rem;">
-                <i class="bi bi-shield-lock-fill text-info me-1"></i>
-                KEY-ID: <span id="keyFingerprintDisplay">####</span>
-            </span>
+            <div class="d-inline-flex align-items-center bg-dark text-light rounded-pill px-3 py-2 shadow-sm border me-3" style="border-color: rgba(26, 188, 156, 0.3) !important; box-shadow: 0 0 15px rgba(26, 188, 156, 0.1) !important;">
+                <div class="d-flex align-items-center justify-content-center rounded-circle me-2" style="width: 26px; height: 26px; background-color: rgba(26, 188, 156, 0.15);">
+                    <i class="bi bi-shield-lock-fill" style="color: #1abc9c; font-size: 0.85rem;"></i>
+                </div>
+                <span class="text-secondary fw-bold me-2" style="font-size: 0.7rem; letter-spacing: 0.5px;">KEY-ID:</span>
+                <span id="keyFingerprintDisplay" class="fw-bold" style="font-family: 'Consolas', monospace; letter-spacing: 1.5px; color: #f8fafc; font-size: 0.9rem;">####</span>
+            </div>
 
             <div class="d-flex align-items-center px-3 py-2 rounded-pill shadow-sm" style="background-color: rgba(255, 255, 255, 0.15); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.25);">
 
