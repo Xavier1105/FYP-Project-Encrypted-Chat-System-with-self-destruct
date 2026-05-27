@@ -41,12 +41,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             if ($target_role === 'hos' && $_SESSION['role'] !== 'hos') {
                 $message = "<div class='alert alert-danger alert-dismissible fade show' role='alert' id='autoDismissAlert'><strong>Access Denied:</strong> Only the Head of Security can authorize the revocation of this account.<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
             } else {
-                $stmt = $conn->prepare("DELETE FROM users WHERE user_id = ?");
+                // SOLUTION: Just lock the account to revoke access and preserve the Audit Trail
+                $stmt = $conn->prepare("UPDATE users SET is_locked = 1 WHERE user_id = ?");
                 $stmt->bind_param("i", $target_id);
-                if ($stmt->execute()) $message = "<div class='alert alert-secondary alert-dismissible fade show' role='alert' id='autoDismissAlert'>User account successfully revoked.<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+                if ($stmt->execute()) {
+                    $message = "<div class='alert alert-secondary alert-dismissible fade show' role='alert' id='autoDismissAlert'><i class='bi bi-person-x-fill me-2'></i> User access successfully revoked (Account Locked).<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+                }
                 $stmt->close();
             }
-        } elseif ($_POST['action'] === 'unlock_user') {
+        }elseif ($_POST['action'] === 'unlock_user') {
             // NEW: Handle unlocking a locked account from the new directory
             $stmt = $conn->prepare("UPDATE users SET is_locked = 0, failed_attempts = 0 WHERE user_id = ?");
             $stmt->bind_param("i", $target_id);
@@ -1233,12 +1236,22 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
             }
         }
 
-        // 2. NEW: The Live Polling Engine
+// 2. NEW: The Live Polling Engine
         async function checkLiveNotifications() {
             try {
                 // Silently check the database
                 const res = await fetch('check_notifications.php');
                 const data = await res.json();
+
+                // ==========================================
+                // THE INSTANT KICK CATCHER
+                // ==========================================
+                if (data.force_logout === true) {
+                    // Instantly redirect them to the login page
+                    window.location.href = 'index.php'; 
+                    return; // Stop running any other code
+                }
+                // ==========================================
 
                 if (data.success) {
                     // Send the live number to the UI updater!

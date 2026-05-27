@@ -21,7 +21,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         // 1. CHECK IF ACCOUNT IS ALREADY LOCKED
         if ($user['is_locked'] == 1) {
-            $error = "<strong>SECURITY LOCKDOWN:</strong> Account disabled due to multiple failed attempts. Contact Admin.";
+            
+            // Check if locked by the system (brute-force) or by the Admin/HOS
+            if ($user['failed_attempts'] >= 3) {
+                $error = "<strong>SECURITY LOCKDOWN:</strong> Account disabled due to multiple failed login attempts. Contact Admin.";
+            } else {
+                $error = "<strong>ACCOUNT SUSPENDED:</strong> Your access has been administratively revoked pending review. Please contact the Head of Security or Admin.";
+            }
 
             // If they are locked AND panic mode is on, fire the JS wipe just in case they are still trying
             if ($user['panic_mode'] == 1) {

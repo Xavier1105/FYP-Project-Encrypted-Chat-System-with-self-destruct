@@ -7,9 +7,30 @@ if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
+
+// ==========================================
+// 2. THE PHP GATEKEEPER (Instant Kick on Page Load)
+// ==========================================
+$check_lock = $conn->prepare("SELECT is_locked FROM users WHERE user_id = ?");
+$check_lock->bind_param("i", $_SESSION['user_id']);
+$check_lock->execute();
+$lock_status = $check_lock->get_result()->fetch_assoc()['is_locked'];
+$check_lock->close();
+
+if ($lock_status == 1) {
+    // If Admin/HOS locked them, instantly destroy their session
+    session_unset();
+    session_destroy();
+    
+    // Kick them to the login screen before the page even loads
+    header("Location: login.php"); 
+    exit();
+}
+// ==========================================
+
 // (Admin block removed so they can load this page)
 
-// 2. INCLUDE LOGIC
+// 3. INCLUDE LOGIC
 require_once 'contact_controller.php';
 
 // ENTERPRISE COLD STORAGE: Dynamically load Master Audit Public Key
@@ -3617,8 +3638,9 @@ $stmt_info->close();
                     selectedMessageElement = messageBubble;
 
                     // Grab the elements
-                    // NEW: Checks if the row is aligned to the right (Sent) or left (Received)
-                    const isReceivedMessage = !messageBubble.parentElement.classList.contains('justify-content-end');
+                    // Find the actual message row (data-id), then check alignment
+                    const messageRow = messageBubble.closest('[data-id]');
+                    const isReceivedMessage = messageRow ? !messageRow.classList.contains('justify-content-end') : true;
                     const btnDeleteEveryone = document.getElementById('btnDeleteEveryone');
                     const btnEditMessage = document.getElementById('btnEditMessage');
 
@@ -3631,8 +3653,14 @@ $stmt_info->close();
                         if (hoursPassed > 1) isExpired = true; // Flag as expired if older than 1 hour!
                     }
 
-                    // Hide Edit if it's someone else's message OR if the 1-hour timer expired!
-                    if (isReceivedMessage || isExpired) {
+                    // NEW: Check if the message contains media (photo, video, or document)
+                    const mediaScope = messageRow || messageBubble;
+                    const hasMedia = mediaScope.querySelector('img:not([style*="30px"]):not(.avatar)') !== null
+                        || mediaScope.querySelector('video') !== null
+                        || mediaScope.querySelector('a[href*="uploads/"]') !== null;
+
+                    // Hide Edit if it's someone else's message, expired, OR contains media
+                    if (isReceivedMessage || isExpired || hasMedia) {
                         if (btnEditMessage) btnEditMessage.style.setProperty('display', 'none', 'important');
                     } else {
                         if (btnEditMessage) btnEditMessage.style.setProperty('display', 'flex', 'important');
@@ -3715,8 +3743,19 @@ $stmt_info->close();
                     .then(res => res.json())
                     .then(data => {
                         if (data.success) {
+                            // Instant UI removal for "delete for me"
+                            if (type === 'me') {
+                                const msgRow = document.querySelector(`[data-id="${msgId}"]`);
+                                if (msgRow) {
+                                    msgRow.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                                    msgRow.style.opacity = '0';
+                                    msgRow.style.transform = 'scale(0.95)';
+                                    setTimeout(() => msgRow.remove(), 300);
+                                }
+                            }
+
                             const currentName = document.getElementById('chatUserName').innerText.trim();
-                            loadMessages(currentName); // Reload chat instantly so the message vanishes!
+                            loadMessages(currentName); // Reload chat so the message updates for everyone!
                         } else {
                             alert("Error: " + data.error);
                         }
@@ -4868,7 +4907,7 @@ $stmt_info->close();
                         } else if (doc) {
                             previewHtml = `<div style="width: 45px; height: 45px; background: rgba(13, 110, 253, 0.2); display:flex; align-items:center; justify-content:center; border-radius:6px;"><i class="bi bi-file-earmark-text text-primary fs-4"></i></div>`;
                             fileType = "Document";
-                            // NO CHECKBOX! Just a button to open the document in a new tab
+                            // No checkbox — document can be clicked to download directly
                             actionHtml = `<a href="${doc.href}" target="_blank" class="btn btn-sm btn-outline-primary me-3 ms-1 px-2 py-1" style="font-size: 0.75rem;" title="Open Document in New Tab"><i class="bi bi-box-arrow-up-right"></i></a>`;
                         }
 

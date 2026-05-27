@@ -12,6 +12,27 @@ if (!isset($_SESSION['user_id'])) {
 
 $my_id = $_SESSION['user_id'];
 
+// ==========================================
+// NEW: THE INSTANT KICK GATEKEEPER
+// ==========================================
+$check_lock = $conn->prepare("SELECT is_locked FROM users WHERE user_id = ?");
+$check_lock->bind_param("i", $my_id);
+$check_lock->execute();
+$user_data = $check_lock->get_result()->fetch_assoc();
+$check_lock->close();
+
+if ($user_data['is_locked'] == 1) {
+    // Destroy the session on the server side
+    session_unset();
+    session_destroy();
+    
+    // Tell the frontend JavaScript to immediately redirect to login!
+    echo json_encode(["success" => false, "force_logout" => true]);
+    exit();
+}
+// ==========================================
+
+
 // 1. Fetch Pending Friend Requests
 $friend_stmt = $conn->prepare("SELECT COUNT(*) FROM friend_requests WHERE receiver_id = ? AND status = 'pending'");
 $friend_stmt->bind_param("i", $my_id);
