@@ -45,7 +45,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $stmt = $conn->prepare("UPDATE users SET is_locked = 1 WHERE user_id = ?");
                 $stmt->bind_param("i", $target_id);
                 if ($stmt->execute()) {
-                    $message = "<div class='alert alert-secondary alert-dismissible fade show' role='alert' id='autoDismissAlert'><i class='bi bi-person-x-fill me-2'></i> User access successfully revoked (Account Locked).<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+                    // CHANGED: 'alert-secondary' is now 'alert-danger' to make the badge/message red!
+                    $message = "<div class='alert alert-danger alert-dismissible fade show shadow-sm' role='alert' id='autoDismissAlert'><i class='bi bi-person-x-fill me-2'></i> User access successfully revoked (Account Locked).<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
                 }
                 $stmt->close();
             }

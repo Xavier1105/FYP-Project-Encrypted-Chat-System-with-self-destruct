@@ -67,6 +67,80 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
     exit; // CRITICAL: Stop the script here!
 }
 
+// ==========================================
+// NEW: GLOBAL SIDEBAR STATUS SYNC (AJAX)
+// ==========================================
+if (isset($_GET['action']) && $_GET['action'] === 'get_all_statuses') {
+    header('Content-Type: application/json');
+    
+    $my_id = $_SESSION['user_id'];
+    $statuses = [];
+
+    // FIXED: Using a dedicated SQL query so it never fails!
+    $sync_sql = "SELECT u.user_id, u.username, u.last_seen, u.is_active_session, u.show_last_seen,
+                 IF(b.block_id IS NOT NULL, 1, 0) AS is_blocked_by_me
+                 FROM contacts c 
+                 JOIN users u ON c.contact_id = u.user_id 
+                 LEFT JOIN blocked_users b ON b.blocker_id = c.user_id AND b.blocked_id = u.user_id AND b.is_active = 1
+                 WHERE c.user_id = ? AND c.is_hidden = 0";
+                 
+    $stmt_sync = $conn->prepare($sync_sql);
+    $stmt_sync->bind_param("i", $my_id);
+    $stmt_sync->execute();
+    $my_contacts = $stmt_sync->get_result();
+    
+    while ($row = $my_contacts->fetch_assoc()) {
+        $last_seen_time = strtotime($row['last_seen']);
+        $current_time = time();
+        $time_diff = $current_time - $last_seen_time;
+        
+        // Reverse Block Check (Did they block me?)
+        $am_i_blocked = false;
+        $rev_check = $conn->prepare("SELECT is_active FROM blocked_users WHERE blocker_id = ? AND blocked_id = ? AND is_active = 1");
+        $rev_check->bind_param("ii", $row['user_id'], $my_id);
+        $rev_check->execute();
+        if ($rev_check->get_result()->num_rows > 0) {
+            $am_i_blocked = true;
+        }
+        $rev_check->close();
+        
+        $status_text = '';
+        $status_class = 'text-muted';
+        
+        if ($row['is_blocked_by_me'] == 1) {
+            $status_text = 'Blocked';
+            $status_class = 'text-danger fw-bold';
+        } else if ($am_i_blocked) {
+            $status_text = 'Unavailable';
+            $status_class = 'text-muted fw-bold';
+        } else if (isset($row['show_last_seen']) && $row['show_last_seen'] == 0) {
+            $status_text = 'Offline';
+        } else if ($row['is_active_session'] == 1 && $row['last_seen'] && $time_diff >= 0 && $time_diff < 1800) {
+            $status_text = 'Online';
+            $status_class = 'text-success fw-bold';
+        } else {
+            if ($row['last_seen']) {
+                $mins = abs(round($time_diff / 60));
+                if ($mins < 60) $status_text = $mins . " m ago";
+                elseif ($mins < 1440) $status_text = round($mins / 60) . " h ago";
+                else $status_text = date('d M', $last_seen_time);
+            } else {
+                $status_text = 'Offline';
+            }
+        }
+        
+        // Store their status in the array
+        $statuses[$row['username']] = [
+            'text' => $status_text,
+            'class' => $status_class
+        ];
+    }
+    $stmt_sync->close();
+    
+    echo json_encode($statuses);
+    exit; // Stop the script here!
+}
+
 // --- A. AJAX SEARCH HANDLER (NEW BLOCK) ---
 // This listens for JavaScript requests. If detected, it returns HTML and STOPS.
 if (isset($_GET['ajax_search'])) {
@@ -376,9 +450,23 @@ while ($row = $my_contacts->fetch_assoc()) {
     $current_time = time();
     $time_diff = $current_time - $last_seen_time;
 
+    // ==========================================
+    // NEW: REVERSE BLOCK CHECK (Did they block me?)
+    // ==========================================
+    $am_i_blocked = false;
+    // Check if the other person ($row['user_id']) has blocked me ($my_id)
+    $reverse_check = $conn->prepare("SELECT is_active FROM blocked_users WHERE blocker_id = ? AND blocked_id = ? AND is_active = 1");
+    $reverse_check->bind_param("ii", $row['user_id'], $my_id);
+    $reverse_check->execute();
+    if ($reverse_check->get_result()->num_rows > 0) {
+        $am_i_blocked = true;
+    }
+    $reverse_check->close();
+    // ==========================================
+
     // --- UPDATED STATUS LOGIC ---
 
-    // 1. IS THIS USER BLOCKED?
+    // 1. IS THIS USER BLOCKED (BY ME)?
     if ($row['is_blocked_by_me'] == 1) {
         $row['status'] = 'blocked';
         $row['status_text'] = 'Blocked';
@@ -386,23 +474,32 @@ while ($row = $my_contacts->fetch_assoc()) {
         $row['header_class'] = 'text-danger fw-bold';
     }
     // ========================================================
-    // 2. NEW: PRIVACY GUARD
+    // 2. NEW: DID THEY BLOCK ME? (Receiver Side Check)
+    // ========================================================
+    else if ($am_i_blocked) {
+        $row['status'] = 'unavailable';
+        $row['status_text'] = 'Unavailable'; 
+        $row['header_status'] = 'Unavailable';
+        $row['header_class'] = 'text-muted fw-bold';
+    }
+    // ========================================================
+    // 3. PRIVACY GUARD
     // ========================================================
     else if (isset($row['show_last_seen']) && $row['show_last_seen'] == 0) {
         $row['status'] = 'offline';
-        $row['status_text'] = 'Offline'; // Forces sidebar to say Offline
-        $row['header_status'] = 'Status Hidden'; // Forces header to say Status Hidden
+        $row['status_text'] = 'Offline'; 
+        $row['header_status'] = 'Status Hidden'; 
         $row['header_class'] = 'text-muted';
     }
     // ========================================================
-    // 3. CHECK: ARE THEY ONLINE?
+    // 4. CHECK: ARE THEY ONLINE?
     else if ($row['is_active_session'] == 1 && $row['last_seen'] && $time_diff >= 0 && $time_diff < 1800) {
         $row['status'] = 'online';
         $row['status_text'] = 'Online';
         $row['header_status'] = '● Online';
         $row['header_class'] = 'text-success fw-bold';
     }
-    // 4. OTHERWISE: THEY ARE OFFLINE WITH PUBLIC TIMESTAMPS
+    // 5. OTHERWISE: THEY ARE OFFLINE WITH PUBLIC TIMESTAMPS
     else {
         $row['status'] = 'offline';
 

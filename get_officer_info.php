@@ -14,7 +14,7 @@ if (empty($target_username)) {
     die(json_encode(['error' => 'No username provided']));
 }
 
-// 1. Fetch user data (NEW: Now fetching 'show_last_seen' from the database!)
+// 1. Fetch user data
 $stmt = $conn->prepare("SELECT user_id, officer_id, username, role, position, profile_picture, public_key, last_seen, is_active_session, show_last_seen FROM users WHERE username = ?");
 $stmt->bind_param("s", $target_username);
 $stmt->execute();
@@ -23,7 +23,7 @@ $officer_info = $result->fetch_assoc();
 $stmt->close();
 
 if ($officer_info) {
-    // 2. Check if blocked
+    // 2. Check if I BLOCKED THEM
     $is_blocked = false;
     $block_check = $conn->prepare("SELECT is_active FROM blocked_users WHERE blocker_id = ? AND blocked_id = ? AND is_active = 1");
     $block_check->bind_param("ii", $my_user_id, $officer_info['user_id']);
@@ -35,24 +35,43 @@ if ($officer_info) {
 
     $officer_info['is_blocked_by_me'] = $is_blocked;
 
-    // 3. STATUS CALCULATION (WITH NEW PRIVACY GUARD)
+    // ========================================================
+    // NEW: Check if THEY BLOCKED ME (The Reverse Check)
+    // ========================================================
+    $am_i_blocked = false;
+    $reverse_check = $conn->prepare("SELECT is_active FROM blocked_users WHERE blocker_id = ? AND blocked_id = ? AND is_active = 1");
+    // Notice the IDs are flipped here! Blocker = them, Blocked = me
+    $reverse_check->bind_param("ii", $officer_info['user_id'], $my_user_id);
+    $reverse_check->execute();
+    if ($reverse_check->get_result()->num_rows > 0) {
+        $am_i_blocked = true;
+    }
+    $reverse_check->close();
+
+    $officer_info['am_i_blocked'] = $am_i_blocked;
+    // ========================================================
+
+
+    // 3. STATUS CALCULATION
     if ($is_blocked) {
         $officer_info['header_status'] = 'Connection Terminated';
         $officer_info['header_class'] = 'text-danger fw-bold';
         $officer_info['sidebar_status'] = 'Blocked';
     }
-    // ========================================================
-    // NEW: PRIVACY GUARD
-    // If they turned off the switch, hide their exact time!
-    // ========================================================
+    // NEW: If they blocked me, force PHP to send neutral/unavailable states
+    else if ($am_i_blocked) {
+        $officer_info['header_status'] = 'Unavailable';
+        $officer_info['header_class'] = 'text-muted';
+        $officer_info['sidebar_status'] = 'Unavailable'; 
+    }
+    // PRIVACY GUARD
     else if (isset($officer_info['show_last_seen']) && $officer_info['show_last_seen'] == 0) {
         $officer_info['header_status'] = 'Status Hidden';
         $officer_info['header_class'] = 'text-muted';
         $officer_info['sidebar_status'] = 'Offline';
     }
-    // ========================================================
+    // Normal time math for users who allow it
     else {
-        // Normal time math for users who allow it
         $last_seen_time = strtotime($officer_info['last_seen']);
         $current_time = time();
         $time_diff = $current_time - $last_seen_time;

@@ -5,13 +5,17 @@ require_once 'db_connect.php';
 $error = '';
 $login_input = ''; // Variable to hold the entered ID or Username
 $trigger_panic_wipe = false; // NEW: The detonator switch
+$login_success = false; // Flag: Did the user pass authentication?
+$has_public_key = false; // Flag: Does this user have an existing encryption key?
+$logged_in_user_id = null;
+$logged_in_username = '';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $login_input = trim($_POST['username']); // Get input (ID or Username)
     $password = $_POST['password'];
 
     // SQL: Check IF input matches 'officer_id' OR 'username' and get the new security columns
-    $stmt = $conn->prepare("SELECT user_id, officer_id, username, password_hash, role, is_approved, failed_attempts, is_locked, panic_mode FROM users WHERE officer_id = ? OR username = ?");
+    $stmt = $conn->prepare("SELECT user_id, officer_id, username, password_hash, role, is_approved, failed_attempts, is_locked, panic_mode, public_key FROM users WHERE officer_id = ? OR username = ?");
     $stmt->bind_param("ss", $login_input, $login_input); // Bind same input twice
     $stmt->execute();
     $result = $stmt->get_result(); // Using get_result makes it easier to pull an array of data
@@ -53,8 +57,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $_SESSION['username'] = $user['username'];
                     $_SESSION['role'] = $user['role'];
 
-                    header("Location: index.php");
-                    exit();
+                    // Set flags for JavaScript-based key check (don't redirect via PHP)
+                    $login_success = true;
+                    $has_public_key = !empty($user['public_key']);
+                    $logged_in_user_id = $user['user_id'];
+                    $logged_in_username = $user['username'];
                 } else {
                     $error = "Account pending approval from Administrator.";
                 }
@@ -275,7 +282,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 <body>
 
-    <div class="login-card">
+    <!-- ==========================================
+         SECTION 1: THE LOGIN FORM (Default View)
+         ========================================== -->
+    <div class="login-card" id="loginFormCard">
         <div class="logo-placeholder">
             <img src="Sentinel logo.png" alt="Sentinel Logo">
         </div>
@@ -339,6 +349,49 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     </div>
 
+    <!-- ==========================================
+         SECTION 2: KEY UPLOAD UI (Hidden by default)
+         Shown when login succeeds but localStorage key is missing
+         ========================================== -->
+    <div class="login-card d-none" id="keyUploadCard">
+        <div class="text-center mb-4">
+            <i class="bi bi-shield-lock-fill" style="font-size: 4rem; color: #0dcaf0; text-shadow: 0 0 20px rgba(13, 202, 240, 0.3);"></i>
+        </div>
+
+        <h4 class="fw-bold text-center" style="color: #1a2e44;">Security Key Required</h4>
+        <p class="text-muted text-center small mb-4">
+            Your browser's local storage has been cleared or you are on a new device. Please upload your <strong>Security Key Backup (.json)</strong> file to restore access to your encrypted chat history.
+        </p>
+
+        <div class="p-3 rounded mb-3" style="background: rgba(13, 202, 240, 0.08); border: 1px dashed rgba(13, 202, 240, 0.4);">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-info-circle-fill me-2" style="color: #0dcaf0;"></i>
+                <small style="color: #555; line-height: 1.4;">This is the <code>.json</code> file you downloaded from <strong>Settings → Export Key Backup</strong>.</small>
+            </div>
+        </div>
+
+        <input type="file" id="loginKeyFileInput" class="form-control mb-3" accept=".json" style="border-color: #0dcaf0;">
+
+        <div id="keyUploadStatus"></div>
+
+        <button class="btn w-100 fw-bold mb-3 shadow-sm" id="btnUnlockKey" onclick="importKeyFromLogin()" style="background: linear-gradient(135deg, #0dcaf0, #0d6efd); color: white; border: none; padding: 0.7rem; border-radius: 8px; transition: all 0.2s ease-in-out;">
+            <i class="bi bi-unlock-fill me-2"></i> Unlock & Continue
+        </button>
+
+        <hr class="my-3" style="border-color: #dee2e6;">
+
+        <p class="text-muted text-center small mb-2">Lost your backup file?</p>
+        <a href="secure_gate.php" class="btn btn-outline-danger btn-sm w-100 mb-3" style="border-radius: 8px;">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i> Generate New Keys (Wipes Old History)
+        </a>
+
+        <div class="text-center mt-2">
+            <a href="logout.php" class="forgot-link" style="color: #6c757d;">
+                <i class="bi bi-box-arrow-left me-1"></i> Cancel and Logout
+            </a>
+        </div>
+    </div>
+
     <?php if ($trigger_panic_wipe): ?>
         <script>
             console.warn("CRITICAL ALERT: MAXIMUM FAILED ATTEMPTS REACHED.");
@@ -355,24 +408,128 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <?php endif; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="crypto.js"></script>
+
+    <!-- ==========================================
+         LOGIN SUCCESS: SMART KEY CHECK
+         ========================================== -->
+    <?php if ($login_success): ?>
+    <script>
+        (function() {
+            const LOGIN_USER_ID = <?php echo $logged_in_user_id; ?>;
+            const LOGIN_USERNAME = "<?php echo htmlspecialchars($logged_in_username); ?>";
+            const HAS_PUBLIC_KEY = <?php echo $has_public_key ? 'true' : 'false'; ?>;
+            const PRIV_KEY_NAME = 'sentinel_private_key_' + LOGIN_USER_ID;
+            const storedKey = localStorage.getItem(PRIV_KEY_NAME);
+
+            if (storedKey) {
+                // KEY EXISTS in localStorage → go directly to chat!
+                window.location.replace('index.php');
+            } else if (!HAS_PUBLIC_KEY) {
+                // BRAND NEW USER → go to secure_gate for auto key generation
+                window.location.replace('secure_gate.php');
+            } else {
+                // EXISTING USER but key is MISSING → show key upload UI
+                document.getElementById('loginFormCard').classList.add('d-none');
+                document.getElementById('keyUploadCard').classList.remove('d-none');
+
+                // Set global vars for the import function
+                window._LOGIN_USER_ID = LOGIN_USER_ID;
+                window._LOGIN_USERNAME = LOGIN_USERNAME;
+                window._PRIV_KEY_NAME = PRIV_KEY_NAME;
+            }
+        })();
+    </script>
+    <?php endif; ?>
 
     <script>
+        // ==========================================
+        // KEY IMPORT FUNCTION (for the upload card)
+        // ==========================================
+        function importKeyFromLogin() {
+            const fileInput = document.getElementById('loginKeyFileInput');
+            const statusDiv = document.getElementById('keyUploadStatus');
+            const btn = document.getElementById('btnUnlockKey');
+
+            if (fileInput.files.length === 0) {
+                statusDiv.innerHTML = '<div class="alert alert-warning p-2 small mb-3"><i class="bi bi-exclamation-triangle-fill me-1"></i> Please select your .json backup file first.</div>';
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            // Disable button while processing
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Verifying Key...';
+
+            reader.onload = async function(e) {
+                try {
+                    const keyData = JSON.parse(e.target.result);
+
+                    if (!keyData.private_key || !keyData.public_key) {
+                        throw new Error('Invalid key file format.');
+                    }
+
+                    // 1. Save Private Key to localStorage
+                    localStorage.setItem(window._PRIV_KEY_NAME, keyData.private_key);
+
+                    // 2. Sync Public Key to database
+                    await fetch('save_public_key.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ public_key: keyData.public_key })
+                    });
+
+                    // 3. Show success UI
+                    const fingerprint = typeof generateKeyFingerprint === 'function' ? generateKeyFingerprint(keyData.private_key) : '****';
+
+                    document.getElementById('keyUploadCard').innerHTML = `
+                        <div class="text-center p-4">
+                            <i class="bi bi-check-circle-fill" style="font-size: 4rem; color: #10b981;"></i>
+                            <h4 class="fw-bold mt-3" style="color: #1a2e44;">Keys Verified & Synced</h4>
+                            <div class="badge bg-light border text-dark fs-6 mb-3 px-3 py-2 shadow-sm" style="border-color: #10b981 !important;">Key ID: ${fingerprint}</div>
+                            <p class="text-muted small">Unlocking Sentinel...</p>
+                            <div class="spinner-border text-primary mt-2" role="status" style="width: 1.5rem; height: 1.5rem;"></div>
+                        </div>`;
+
+                    // 4. Redirect to chat after a brief animation
+                    setTimeout(() => {
+                        window.location.replace('index.php');
+                    }, 1500);
+
+                } catch (err) {
+                    console.error('Key import failed:', err);
+                    statusDiv.innerHTML = '<div class="alert alert-danger p-2 small mb-3"><i class="bi bi-x-circle-fill me-1"></i> Invalid or corrupted key file. Please try again.</div>';
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-unlock-fill me-2"></i> Unlock & Continue';
+                }
+            };
+
+            reader.readAsText(file);
+        }
+
+        // ==========================================
+        // STANDARD LOGIN PAGE SCRIPTS
+        // ==========================================
         const togglePassword = document.querySelector('#togglePassword');
         const password = document.querySelector('#password');
         const toggleIcon = document.querySelector('#toggleIcon');
 
-        togglePassword.addEventListener('click', function(e) {
-            const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
-            password.setAttribute('type', type);
+        if (togglePassword) {
+            togglePassword.addEventListener('click', function(e) {
+                const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
+                password.setAttribute('type', type);
 
-            if (type === 'password') {
-                toggleIcon.classList.remove('bi-eye-slash');
-                toggleIcon.classList.add('bi-eye');
-            } else {
-                toggleIcon.classList.remove('bi-eye');
-                toggleIcon.classList.add('bi-eye-slash');
-            }
-        });
+                if (type === 'password') {
+                    toggleIcon.classList.remove('bi-eye-slash');
+                    toggleIcon.classList.add('bi-eye');
+                } else {
+                    toggleIcon.classList.remove('bi-eye');
+                    toggleIcon.classList.add('bi-eye-slash');
+                }
+            });
+        }
 
         // Makes the error alert fade out nicely
         const errorAlert = document.getElementById('errorAlert');

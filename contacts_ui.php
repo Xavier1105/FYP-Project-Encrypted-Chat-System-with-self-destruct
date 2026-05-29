@@ -75,6 +75,32 @@
         transform: translateY(0);
         box-shadow: 0 2px 4px rgba(22, 101, 52, 0.1);
     }
+
+    /* Soft Green Accept Button (Incoming Requests) */
+    .btn-request-accept {
+        background-color: rgba(25, 135, 84, 0.1); /* Soft transparent green */
+        color: #198754; /* Solid green icon */
+        transition: all 0.2s ease;
+    }
+
+    .btn-request-accept:hover {
+        background-color: rgba(25, 135, 84, 0.25); /* Darkens slightly on hover */
+        transform: translateY(-2px); /* Floats up */
+        color: #198754;
+    }
+
+    /* Soft Red Reject Button (Incoming Requests) */
+    .btn-request-reject {
+        background-color: rgba(220, 53, 69, 0.1); /* Soft transparent red */
+        color: #dc3545; /* Solid red icon */
+        transition: all 0.2s ease;
+    }
+
+    .btn-request-reject:hover {
+        background-color: rgba(220, 53, 69, 0.25); /* Darkens slightly on hover */
+        transform: translateY(-2px); /* Floats up */
+        color: #dc3545;
+    }
 </style>
 
 <div id="contactsInterface" style="display: none; flex-direction: column; height: 100%; width: 100%; overflow: hidden; background-color: transparent;">
@@ -224,13 +250,14 @@
                                         <form method="POST" class="m-0">
                                             <input type="hidden" name="accept_request_id" value="<?php echo $req['request_id']; ?>">
                                             <input type="hidden" name="sender_id" value="<?php echo $req['sender_id']; ?>">
-                                            <button class="btn btn-success btn-sm d-flex align-items-center justify-content-center shadow-sm" style="width: 40px; height: 40px; border-radius: 8px; border: none;">
+                                            <button class="btn btn-sm d-flex align-items-center justify-content-center btn-request-accept" style="width: 40px; height: 40px; border-radius: 8px; border: none;">
                                                 <i class="bi bi-person-check-fill fs-5"></i>
                                             </button>
                                         </form>
+                                        
                                         <form method="POST" class="m-0">
                                             <input type="hidden" name="reject_request_id" value="<?php echo $req['request_id']; ?>">
-                                            <button class="btn btn-danger btn-sm d-flex align-items-center justify-content-center shadow-sm" style="width: 40px; height: 40px; border-radius: 8px; border: none;">
+                                            <button class="btn btn-sm d-flex align-items-center justify-content-center btn-request-reject" style="width: 40px; height: 40px; border-radius: 8px; border: none;">
                                                 <i class="bi bi-x-lg"></i>
                                             </button>
                                         </form>

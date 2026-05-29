@@ -74,10 +74,10 @@ if ($has_file) {
     $file_name = basename($_FILES['attachment']['name']);
     $file_type = mime_content_type($_FILES['attachment']['tmp_name']);
 
-    // Allowed file types for security
-    $allowed_exts = ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'];
-    if (!in_array($ext, $allowed_exts)) {
-        die(json_encode(['success' => false, 'error' => 'File type not allowed']));
+    // Blocked file types for security (dangerous executables only)
+    $blocked_exts = ['exe', 'bat', 'cmd', 'msi', 'com', 'scr', 'pif', 'vbs', 'js', 'wsf', 'ps1', 'sh', 'cgi', 'php', 'htaccess'];
+    if (in_array($ext, $blocked_exts)) {
+        die(json_encode(['success' => false, 'error' => 'This file type is not allowed for security reasons.']));
     }
 
     $unique_name = uniqid('att_') . '.' . $ext;

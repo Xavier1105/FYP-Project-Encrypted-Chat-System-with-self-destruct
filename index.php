@@ -964,9 +964,20 @@ $stmt_info->close();
                             <div>
                                 <div class="fw-bold"><?php echo htmlspecialchars($row['username']); ?></div>
 
-                                <small class="<?php echo ($row['status'] === 'online') ? 'text-success fw-bold' : 'text-muted'; ?>" style="font-size: 0.75rem;">
-                                    <?php echo $row['status_text']; ?>
-                                </small>
+                            <?php 
+                                $status = isset($row['status_text']) ? strtolower(trim($row['status_text'])) : '';
+                                
+                                if ($status === 'blocked'): 
+                                ?>
+                                    <small class="text-danger fw-bold">Blocked</small>
+                                <?php elseif ($status === 'unavailable'): ?>
+                                    <small class="text-muted fw-bold">Unavailable</small>
+                                <?php elseif ($status === 'online'): ?>
+                                    <small class="text-success fw-bold">Online</small>
+                                <?php else: ?>
+                                    <small class="text-muted"><?php echo htmlspecialchars($row['status_text'] ?? ''); ?></small>
+                                <?php endif; ?>
+
                             </div>
                             <?php if (isset($row['unread_count']) && $row['unread_count'] > 0): ?>
                                 <span class="badge bg-danger rounded-pill ms-auto unread-badge shadow-sm"><?php echo $row['unread_count']; ?></span>
@@ -1487,8 +1498,8 @@ $stmt_info->close();
                 </div>
             </div>
 
-            <div id="copySuccessBadge" class="badge bg-success rounded-pill px-4 py-2 shadow-lg"
-                style="display: none; position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); z-index: 9999; font-size: 0.95rem; opacity: 0; transition: opacity 0.3s ease;">
+            <div id="copySuccessBadge" class="rounded-pill px-4 py-2 shadow-lg fw-bold"
+                style="display: none; position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); z-index: 9999; font-size: 0.95rem; opacity: 0; transition: opacity 0.3s ease; background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc;">
                 <i class="bi bi-check-circle-fill me-2"></i> Message copied!
             </div>
 
@@ -2435,6 +2446,128 @@ $stmt_info->close();
                 }
             }
 
+            // =========================================================
+            // NEW: REAL-TIME STATUS SYNC ENGINE
+            // Checks for blocks, unblocks, and online/offline changes!
+            // =========================================================
+            function syncChatStatus(username) {
+                fetch('get_officer_info.php?username=' + encodeURIComponent(username))
+                    .then(res => res.json())
+                    .then(data => {
+                        const statusEl = document.getElementById('chatUserStatus');
+                        const normalInput = document.getElementById('normalInputArea');
+                        const blockedInput = document.getElementById('blockedInputArea');
+                        const dossierBlockBtn = document.getElementById('dossierBlockBtn');
+                        const dossierBlockText = document.getElementById('dossierBlockText');
+                        
+                        // Check what is currently visible on screen
+                        const isNormalVisible = !normalInput.classList.contains('d-none');
+
+                        if (data.is_blocked_by_me) {
+                            return; // The blocker's UI is handled by blockActiveOfficer()
+                        } 
+
+                        if (data.am_i_blocked) {
+                            // SCENARIO 1: THEY JUST BLOCKED US!
+                            if (isNormalVisible) {
+                                normalInput.classList.add('d-none');
+                                blockedInput.classList.remove('d-none');
+                                blockedInput.innerHTML = `
+                                    <div class="d-flex align-items-center justify-content-center w-100 p-3" style="background-color: var(--bs-secondary-bg); border-radius: 12px; border: 1px solid var(--bs-border-color);">
+                                        <i class="bi bi-dash-circle-fill me-2 text-secondary fs-5"></i>
+                                        <span class="fw-bold text-secondary" style="font-size: 0.95rem;">Cannot send message. You have been blocked by ${username}.</span>
+                                    </div>
+                                `;
+                            }
+                            
+                            // Force Header to Unavailable
+                            if (statusEl) {
+                                statusEl.innerText = 'Unavailable';
+                                statusEl.className = 'text-muted fw-bold';
+                            }
+                            if (dossierBlockBtn && dossierBlockText) {
+                                dossierBlockBtn.disabled = true;
+                                dossierBlockBtn.classList.add('opacity-50');
+                                dossierBlockText.innerText = 'Action Unavailable';
+                            }
+
+                            // Force Sidebar to Unavailable (Bulletproof method)
+                            const contactItem = document.getElementById('contact-' + username);
+                            if (contactItem) {
+                                const statusElements = contactItem.querySelectorAll('small');
+                                if (statusElements.length > 0) {
+                                    const targetText = statusElements[statusElements.length - 1];
+                                    targetText.innerText = 'Unavailable';
+                                    targetText.className = 'text-muted fw-bold';
+                                }
+                            }
+                        } else {
+                            // SCENARIO 2: THEY UNBLOCKED US (Normal Chat Restored!)
+                            if (!isNormalVisible) {
+                                normalInput.classList.remove('d-none');
+                                blockedInput.classList.add('d-none');
+                            }
+                            
+                            // Live update the Header (Online/Offline/Last Seen)
+                            if (statusEl && data.header_status) {
+                                statusEl.innerText = data.header_status;
+                                statusEl.className = data.header_class;
+                            }
+                            if (dossierBlockBtn && dossierBlockText) {
+                                dossierBlockBtn.disabled = false;
+                                dossierBlockBtn.classList.remove('opacity-50');
+                                dossierBlockText.innerText = 'Restrict / Block Officer';
+                            }
+
+                            // Live update the Sidebar (Bulletproof method)
+                            const contactItem = document.getElementById('contact-' + username);
+                            if (contactItem) {
+                                const statusElements = contactItem.querySelectorAll('small');
+                                if (statusElements.length > 0) {
+                                    const targetText = statusElements[statusElements.length - 1];
+                                    targetText.innerText = data.sidebar_status || 'Offline';
+                                    
+                                    // Make it strictly green if they are online!
+                                    if (data.sidebar_status === 'Online') {
+                                        targetText.className = 'text-success fw-bold';
+                                    } else {
+                                        targetText.className = 'text-muted';
+                                    }
+                                }
+                            }
+                        }
+                    })
+                    .catch(err => console.error("Status Sync Error:", err));
+            }
+
+            // =========================================================
+            // NEW: GLOBAL SIDEBAR LIVE-SYNC
+            // Automatically updates Online/Offline/Blocked statuses 
+            // for the entire sidebar every 4 seconds!
+            // =========================================================
+            setInterval(() => {
+                fetch('contact_controller.php?action=get_all_statuses')
+                    .then(res => res.json())
+                    .then(data => {
+                        // Loop through every user returned from the server
+                        for (const [username, info] of Object.entries(data)) {
+                            // Find them in the sidebar
+                            const contactItem = document.getElementById('contact-' + username);
+                            if (contactItem) {
+                                const statusElements = contactItem.querySelectorAll('small');
+                                if (statusElements.length > 0) {
+                                    const targetText = statusElements[statusElements.length - 1];
+                                    
+                                    // Instantly apply the live text and color!
+                                    targetText.innerText = info.text;
+                                    targetText.className = info.class;
+                                }
+                            }
+                        }
+                    })
+                    .catch(err => console.error("Global Sidebar Sync Error:", err));
+            }, 4000);
+            
             // --- 3. CHAT FUNCTIONS ---
             function selectUser(username, headerStatus, headerClass, profilePic) {
                 if (chatPollInterval) clearInterval(chatPollInterval);
@@ -2508,17 +2641,12 @@ $stmt_info->close();
                     .then(response => response.json())
                     .then(data => {
 
-                        // Force the header to match the live database, NOT the old HTML
-                        if (statusEl && data.header_status) {
-                            statusEl.innerText = data.header_status;
-                            statusEl.className = data.header_class;
-                        }
-
+                        const statusEl = document.getElementById('chatUserStatus');
                         const dossierBlockBtn = document.getElementById('dossierBlockBtn');
                         const dossierBlockText = document.getElementById('dossierBlockText');
 
                         if (data.is_blocked_by_me) {
-                            // Hide text box, show blocked bar
+                            // 1. SCENARIO: YOU BLOCKED THEM
                             document.getElementById('normalInputArea').classList.add('d-none');
                             document.getElementById('blockedInputArea').classList.remove('d-none');
                             document.getElementById('chatMessages').innerHTML = `
@@ -2531,15 +2659,75 @@ $stmt_info->close();
                                 </div>
                             `;
 
+                            if (statusEl) {
+                                statusEl.innerText = 'Connection Terminated';
+                                statusEl.className = 'text-danger fw-bold';
+                            }
                             if (dossierBlockBtn && dossierBlockText) {
                                 dossierBlockBtn.disabled = true;
                                 dossierBlockBtn.classList.add('opacity-50');
                                 dossierBlockText.innerText = 'Officer Blocked';
                             }
+
+                       } else if (data.am_i_blocked) {
+                            // ==========================================
+                            // 2. SCENARIO: THEY BLOCKED YOU (Receiver Side)
+                            // ==========================================
+                            
+                            // Hide normal typing area
+                            document.getElementById('normalInputArea').classList.add('d-none');
+                            
+                            // Show blocked input area and dynamically inject the badge
+                            const blockedArea = document.getElementById('blockedInputArea');
+                            blockedArea.classList.remove('d-none'); 
+                            blockedArea.innerHTML = `
+                                <div class="d-flex align-items-center justify-content-center w-100 p-3" style="background-color: var(--bs-secondary-bg); border-radius: 12px; border: 1px solid var(--bs-border-color);">
+                                    <i class="bi bi-dash-circle-fill me-2 text-secondary fs-5"></i>
+                                    <span class="fw-bold text-secondary" style="font-size: 0.95rem;">Cannot send message. You have been blocked by ${username}.</span>
+                                </div>
+                            `;
+                            
+                            // Override the header so it just looks unavailable
+                            if (statusEl) {
+                                statusEl.innerText = 'Unavailable';
+                                statusEl.className = 'text-muted fw-bold';
+                            }
+                            if (dossierBlockBtn && dossierBlockText) {
+                                dossierBlockBtn.disabled = true;
+                                dossierBlockBtn.classList.add('opacity-50');
+                                dossierBlockText.innerText = 'Action Unavailable';
+                            }
+
+                            // INSTANTLY UPDATE THE SIDEBAR TO "UNAVAILABLE"
+                            const contactItem = document.getElementById('contact-' + username);
+                            if (contactItem) {
+                                const statusElements = contactItem.querySelectorAll('small');
+                                if (statusElements.length > 0) {
+                                    const targetText = statusElements[statusElements.length - 1];
+                                    targetText.innerText = 'Unavailable';
+                                    targetText.className = 'text-muted fw-bold'; 
+                                }
+                            }
+
+                            // Start Live Chat & Status Polling!
+                            loadMessages(username); 
+                            chatPollInterval = setInterval(() => {
+                                const activeName = document.getElementById('chatUserName').innerText.trim();
+                                if (activeName === username) {
+                                    loadMessages(username);      // Gets new messages
+                                    syncChatStatus(username);    // NEW: Gets block/online status!
+                                }
+                            }, 3000);
+
                         } else {
-                            // Normal chat mode
+                            // 3. SCENARIO: NORMAL CHAT
                             document.getElementById('normalInputArea').classList.remove('d-none');
                             document.getElementById('blockedInputArea').classList.add('d-none');
+
+                            if (statusEl && data.header_status) {
+                                statusEl.innerText = data.header_status;
+                                statusEl.className = data.header_class;
+                            }
 
                             if (dossierBlockBtn && dossierBlockText) {
                                 dossierBlockBtn.disabled = false;
@@ -2547,14 +2735,15 @@ $stmt_info->close();
                                 dossierBlockText.innerText = 'Restrict / Block Officer';
                             }
 
-                            // ==========================================
-                            // NEW: LOAD MESSAGES & START AUTO-REFRESH
-                            // ==========================================
-                            loadMessages(username);
+                            // Start Live Chat & Status Polling!
+                            loadMessages(username); 
                             chatPollInterval = setInterval(() => {
                                 const activeName = document.getElementById('chatUserName').innerText.trim();
-                                if (activeName === username) loadMessages(username);
-                            }, 3000); // Refreshes every 3 seconds
+                                if (activeName === username) {
+                                    loadMessages(username);      // Gets new messages
+                                    syncChatStatus(username);    // NEW: Gets block/online status!
+                                }
+                            }, 3000);
                         }
                     });
 
@@ -3362,16 +3551,27 @@ $stmt_info->close();
                         .then(response => response.json())
                         .then(data => {
                             if (data.success) {
-                                // Show tactical red termination screen
-                                document.getElementById('chatMessages').innerHTML = `
-                                    <div class="text-center text-danger p-5 mt-5 d-flex flex-column align-items-center">
-                                        <div class="bg-danger bg-opacity-10 rounded-circle p-4 mb-3 d-inline-flex shadow-sm">
-                                            <i class="bi bi-person-x-fill fs-1"></i>
+                                // ==========================================
+                                // FIXED: STOP AUTO-REFRESH & HIDE HISTORY
+                                // ==========================================
+                                // 1. Kill the live polling so messages don't come back!
+                                if (typeof chatPollInterval !== 'undefined') {
+                                    clearInterval(chatPollInterval);
+                                }
+
+                                // 2. Instantly overwrite the chat box with the termination screen
+                                const chatBox = document.getElementById('chatMessages');
+                                if (chatBox) {
+                                    chatBox.innerHTML = `
+                                        <div class="text-center text-danger p-5 mt-5 d-flex flex-column align-items-center" style="height: 100%; justify-content: center;">
+                                            <div class="bg-danger bg-opacity-10 rounded-circle p-4 mb-3 d-inline-flex shadow-sm">
+                                                <i class="bi bi-person-x-fill fs-1"></i>
+                                            </div>
+                                            <h5 class="fw-bold">Connection Terminated</h5>
+                                            <small>This officer has been restricted and blocked.</small>
                                         </div>
-                                        <h5 class="fw-bold">Connection Terminated</h5>
-                                        <small>This officer has been restricted and blocked.</small>
-                                    </div>
-                                `;
+                                    `;
+                                }
 
                                 // Hide text box, show blocked bar
                                 document.getElementById('normalInputArea').classList.add('d-none');
@@ -3388,11 +3588,15 @@ $stmt_info->close();
                                     headerStatus.innerText = 'Connection Terminated';
                                     headerStatus.className = 'text-danger fw-bold';
                                 }
+                                
                                 const contactItem = document.getElementById('contact-' + currentName);
                                 if (contactItem) {
                                     const statusElements = contactItem.querySelectorAll('small');
                                     if (statusElements.length > 0) {
-                                        statusElements[statusElements.length - 1].innerText = 'Blocked';
+                                        const targetText = statusElements[statusElements.length - 1];
+                                        targetText.innerText = 'Blocked';
+                                        // CHANGED: Force the text to become bright red!
+                                        targetText.className = 'text-danger fw-bold'; 
                                     }
                                 }
 
@@ -3467,7 +3671,7 @@ $stmt_info->close();
                 }
             }
 
-            /**
+ /**
              * unblockActiveOfficer() - Unblocks the user directly from the chat interface.
              */
             function unblockActiveOfficer() {
@@ -3507,11 +3711,31 @@ $stmt_info->close();
                                             if (statusElements.length > 0) {
                                                 const lastSmall = statusElements[statusElements.length - 1];
                                                 lastSmall.innerText = info.sidebar_status || 'Offline';
+                                                
+                                                // Check if they are online to apply the green text!
+                                                if (info.sidebar_status === 'Online') {
+                                                    lastSmall.className = 'text-success fw-bold';
+                                                } else {
+                                                    lastSmall.className = 'text-muted';
+                                                }
                                             }
                                         }
+                                        
+                                        // ========================================================
+                                        // 3. RESTORE CHAT HISTORY INSTANTLY
+                                        // ========================================================
+                                        loadMessages(currentName);
+                                        
+                                        // Restart the live polling loop so messages keep refreshing!
+                                        if (typeof chatPollInterval !== 'undefined') clearInterval(chatPollInterval);
+                                        chatPollInterval = setInterval(() => {
+                                            const activeName = document.getElementById('chatUserName').innerText.trim();
+                                            if (activeName === currentName) loadMessages(currentName);
+                                        }, 3000);
+
                                     });
 
-                                // 3. SETTINGS PANEL: Find and destroy their blocked card
+                                // 4. SETTINGS PANEL: Find and destroy their blocked card
                                 document.querySelectorAll('.blocked-user-card').forEach(card => {
                                     const nameEl = card.querySelector('h6');
                                     if (nameEl && nameEl.innerText.trim() === currentName) {
@@ -3519,14 +3743,14 @@ $stmt_info->close();
                                     }
                                 });
 
-                                // 4. SETTINGS PANEL: Update the Badge Count (-1)
+                                // 5. SETTINGS PANEL: Update the Badge Count (-1)
                                 const badge = document.getElementById('blockedCountBadge');
                                 if (badge) {
                                     let currentCount = parseInt(badge.innerText) || 0;
                                     badge.innerText = Math.max(0, currentCount - 1) + " Blocked";
                                 }
 
-                                // 5. SETTINGS PANEL: Show empty graphic if needed
+                                // 6. SETTINGS PANEL: Show empty graphic if needed
                                 const remainingCards = document.querySelectorAll('.blocked-user-card');
                                 if (remainingCards.length === 0) {
                                     const noBlockedGraphic = document.getElementById('noBlockedUsers');
