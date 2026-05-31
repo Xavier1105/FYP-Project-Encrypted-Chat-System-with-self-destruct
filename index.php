@@ -4728,7 +4728,7 @@ $stmt_info->close();
                 checkedBoxes.forEach(cb => {
                     const formData = new FormData();
                     formData.append('target_username', cb.value);
-                    formData.append('remove_contact', '1'); // NEW: Tell PHP to remove them from the sidebar!
+                    // Only wipe chat history, do NOT remove the contact from the friends list!
 
                     const request = fetch('clear_active_chat.php', {
                         method: 'POST',
@@ -4742,7 +4742,7 @@ $stmt_info->close();
                 try {
                     await Promise.all(deletePromises);
 
-                    alert(`Secure Bulk Wipe Complete. History for ${checkedBoxes.length} contact(s) has been destroyed.`);
+                    alert(`Secure Bulk Wipe Complete. Chat history for ${checkedBoxes.length} contact(s) has been cleared. Your contacts remain in the friends list.`);
 
                     // 5. Check if we just deleted the chat we currently have open on the screen
                     const currentActiveChat = document.getElementById('chatUserName').innerText.trim();
@@ -4760,13 +4760,8 @@ $stmt_info->close();
                         document.getElementById('pinnedMessagesContainer').innerHTML = ''; // Clear pins
                     }
 
-                    // 6. Turn off select mode and refresh the page to clear the sidebar previews
+                    // 6. Turn off select mode (contacts stay visible in sidebar!)
                     toggleSelectMode(document.getElementById('filterBtnSelect'));
-
-                    // Soft refresh to update the "Last Message" previews in the sidebar
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 500);
 
                 } catch (error) {
                     console.error("Bulk wipe failed:", error);

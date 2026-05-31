@@ -50,12 +50,41 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 }
                 $stmt->close();
             }
-        }elseif ($_POST['action'] === 'unlock_user') {
+        } elseif ($_POST['action'] === 'unlock_user') {
             // NEW: Handle unlocking a locked account from the new directory
             $stmt = $conn->prepare("UPDATE users SET is_locked = 0, failed_attempts = 0 WHERE user_id = ?");
             $stmt->bind_param("i", $target_id);
             if ($stmt->execute()) $message = "<div class='alert alert-success alert-dismissible fade show' role='alert' id='autoDismissAlert'><i class='bi bi-unlock-fill me-2'></i> Officer account successfully unlocked and attempts reset.<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
             $stmt->close();
+            
+        // ==========================================
+        // NEW: HANDLE PASSWORD RESET REQUESTS (APPROVE/REJECT)
+        // ==========================================
+        } elseif ($_POST['action'] === 'approve_reset' || $_POST['action'] === 'reject_reset') {
+            $target_id = intval($_POST['target_user_id']);
+            
+            if ($_POST['action'] === 'reject_reset') {
+                // Wipe the request from the user's row
+                $stmt = $conn->prepare("UPDATE users SET reset_requested = 0, reset_reason = NULL WHERE user_id = ?");
+                $stmt->bind_param("i", $target_id);
+                if ($stmt->execute()) $message = "<div class='alert alert-secondary alert-dismissible fade show' role='alert' id='autoDismissAlert'>Password reset request rejected.<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+                $stmt->close();
+            } else {
+                // APPROVE RESET
+                $random_pin = rand(1000, 9999);
+                $temp_password = "Temp-" . $random_pin . "!";
+                $hashed_password = password_hash($temp_password, PASSWORD_DEFAULT);
+                
+                // Change password AND wipe the request in one step
+                $stmt = $conn->prepare("UPDATE users SET password_hash = ?, reset_requested = 0, reset_reason = NULL WHERE user_id = ?");
+                $stmt->bind_param("si", $hashed_password, $target_id);
+                if ($stmt->execute()) {
+                    $show_password_modal = true; 
+                    $generated_temp_password = $temp_password;
+                    $message = "<div class='alert alert-success alert-dismissible fade show' role='alert' id='autoDismissAlert'><i class='bi bi-key-fill me-2'></i> Reset request approved. Temporary password generated.<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+                }
+                $stmt->close();
+            }
         }
     }
 
@@ -92,6 +121,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 // 3. FETCH DATA (Admin Dashboard Stats)
 $pending_query = "SELECT user_id, officer_id, username, created_at FROM users WHERE is_approved = 0 AND role != 'admin'";
 $pending_result = $conn->query($pending_query);
+
+// ==========================================
+// NEW: FETCH PASSWORD RESET REQUESTS FROM USERS TABLE
+// ==========================================
+$reset_req_query = "SELECT user_id, officer_id, username, reset_reason FROM users WHERE reset_requested = 1 ORDER BY username ASC";
+$reset_result = $conn->query($reset_req_query);
+// ==========================================
+
+$active_query = "SELECT user_id, officer_id, username, role, created_at, is_locked FROM users WHERE is_approved = 1 AND is_locked = 0";
+$active_result = $conn->query($active_query);
 
 $active_query = "SELECT user_id, officer_id, username, role, created_at, is_locked FROM users WHERE is_approved = 1 AND is_locked = 0";
 $active_result = $conn->query($active_query);
@@ -600,12 +639,12 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
 
     <div class="container">
         <?php if ($message) echo $message; ?>
-        <?php
-        // DYNAMIC LAYOUT: If HOS, make cards take up 1/4 of the screen (col-lg-3). 
-        // If normal Admin, make cards take up 1/3 of the screen (col-md-4).
-        $card_col_class = ($_SESSION['role'] === 'hos') ? 'col-lg-3 col-md-6 mb-3' : 'col-md-4 mb-3';
+<?php
+        // DYNAMIC LAYOUT: Using Bootstrap flex columns (col-xl) so they automatically size themselves equally!
+        $card_col_class = 'col-xl col-lg-4 col-md-6 mb-3';
         ?>
         <div class="row mb-4">
+            
             <div class="<?php echo $card_col_class; ?>">
                 <div class="card bg-warning text-dark bg-opacity-10 border-warning h-100 shadow-sm overflow-hidden"
                     onclick="jumpToSection('collapseOne')"
@@ -616,6 +655,20 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
                     <div class="card-body text-center">
                         <h5 class="card-title text-muted text-uppercase small fw-bold">Pending Requests</h5>
                         <h2 class="fw-bold display-6 text-warning"><?php echo $pending_result->num_rows; ?></h2>
+                    </div>
+                </div>
+            </div>
+
+            <div class="<?php echo $card_col_class; ?>">
+                <div class="card bg-info text-info bg-opacity-10 border-info h-100 shadow-sm overflow-hidden"
+                    onclick="jumpToSection('collapseReset')"
+                    style="cursor: pointer; transition: all 0.3s ease-in-out; position: relative;"
+                    onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 10px 20px rgba(13, 202, 240, 0.3)';"
+                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';">
+                    <i class="bi bi-key-fill text-info position-absolute end-0 bottom-0 opacity-25 m-2" style="font-size: 3rem;"></i>
+                    <div class="card-body text-center">
+                        <h5 class="card-title text-muted text-uppercase small fw-bold">Reset Requests</h5>
+                        <h2 class="fw-bold display-6 text-info"><?php echo $reset_result->num_rows; ?></h2>
                     </div>
                 </div>
             </div>
@@ -737,6 +790,64 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
                 </div>
             </div>
 
+<div class="accordion-item border-info">
+                <h2 class="accordion-header" id="headingReset">
+                    <button class="accordion-button collapsed fw-bold text-info" type="button" data-bs-toggle="collapse" data-bs-target="#collapseReset" style="background-color: rgba(13, 202, 240, 0.1);">
+                        <i class="bi bi-key-fill me-2"></i> Password Reset Requests
+                        <?php if ($reset_result->num_rows > 0): ?>
+                            <span class="badge bg-info text-dark ms-2"><?php echo $reset_result->num_rows; ?> Pending</span>
+                        <?php endif; ?>
+                    </button>
+                </h2>
+                <div id="collapseReset" class="accordion-collapse collapse" aria-labelledby="headingReset" data-bs-parent="#adminAccordion">
+                    <div class="accordion-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-4">Officer ID</th>
+                                        <th>Username</th>
+                                        <th>Reason for Reset</th>
+                                        <th class="text-end pe-4">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($reset_result->num_rows > 0): ?>
+                                        <?php while ($row = $reset_result->fetch_assoc()): ?>
+                                            <tr>
+                                                <td class="ps-4 fw-bold"><?php echo htmlspecialchars($row['officer_id']); ?></td>
+                                                <td><?php echo htmlspecialchars($row['username']); ?></td>
+                                                <td class="text-muted fst-italic">
+                                                    "<?php echo htmlspecialchars($row['reset_reason']); ?>"
+                                                </td>
+                                                <td class="text-end pe-4">
+                                                    <div class="d-flex justify-content-end gap-2">
+                                                        <form method="POST" class="m-0">
+                                                            <input type="hidden" name="target_user_id" value="<?php echo $row['user_id']; ?>">
+                                                            <input type="hidden" name="action" value="approve_reset">
+                                                            <button type="submit" class="btn btn-sm btn-teal fw-bold px-3 btn-action-hover" onclick="return confirm('Approve this reset request?');">Approve</button>
+                                                        </form>
+                                                        <form method="POST" class="m-0">
+                                                            <input type="hidden" name="target_user_id" value="<?php echo $row['user_id']; ?>">
+                                                            <input type="hidden" name="action" value="reject_reset">
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger fw-bold px-3 btn-action-hover" onclick="return confirm('Reject this request?');">Reject</button>
+                                                        </form>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        <?php endwhile; ?>
+                                    <?php else: ?>
+                                        <tr>
+                                            <td colspan="4" class="text-center py-4 text-muted">No pending reset requests.</td>
+                                        </tr>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="accordion-item border-success">
                 <h2 class="accordion-header" id="headingTwo">
                     <button class="accordion-button collapsed fw-bold text-success" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" style="background-color: rgba(25, 135, 84, 0.1);">
@@ -811,15 +922,8 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
                                                         <form method="POST" class="d-inline" onsubmit="return confirm('Revoke access for this officer?');">
                                                             <input type="hidden" name="target_user_id" value="<?php echo $row['user_id']; ?>">
                                                             <input type="hidden" name="action" value="delete">
-                                                            <button type="submit" class="btn btn-crimson btn-sm fw-bold px-3">
+                                                            <button type="submit" class="btn btn-crimson btn-sm fw-bold px-3 w-100">
                                                                 <i class="bi bi-person-x-fill me-1"></i> Revoke Access
-                                                            </button>
-                                                        </form>
-                                                        
-                                                        <form method="POST" action="admin_dashboard.php" class="d-inline ms-1">
-                                                            <input type="hidden" name="target_user_id" value="<?php echo $row['user_id']; ?>">
-                                                            <button type="submit" name="reset_user_password" class="btn btn-teal btn-sm fw-bold px-3" onclick="return confirm('Are you sure you want to reset this user\'s password?');">
-                                                                <i class="bi bi-key me-1"></i> Reset Password
                                                             </button>
                                                         </form>
                                                     <?php endif; ?>
@@ -1082,6 +1186,20 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
                 </div>
                 <div class="modal-body text-center pt-0">
                     <img id="fullSizeImage" src="" class="img-fluid rounded shadow" style="max-height: 85vh;" alt="Decrypted Evidence">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Viewer Modal -->
+    <div class="modal fade" id="videoViewerModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content bg-dark">
+                <div class="modal-header border-0 pb-0">
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" onclick="document.getElementById('fullSizeVideo').pause();"></button>
+                </div>
+                <div class="modal-body text-center pt-0">
+                    <video id="fullSizeVideo" src="" class="rounded shadow" style="max-height: 85vh; max-width: 100%;" controls></video>
                 </div>
             </div>
         </div>
@@ -1372,6 +1490,15 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
             imageModal.show();
         }
 
+        // NEW: Function to open a decrypted video in the modal player
+        function viewFullVideo(videoSrc) {
+            const videoEl = document.getElementById('fullSizeVideo');
+            videoEl.src = videoSrc;
+            const videoModal = new bootstrap.Modal(document.getElementById('videoViewerModal'));
+            videoModal.show();
+            videoEl.play();
+        }
+
         // 1. Create a temporary variable to hold the Cold Storage key
         let sessionMasterKey = null;
 
@@ -1429,13 +1556,55 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
                         // Pass the master key here too!
                         const decryptedFileStr = await decryptLargeMessage(encryptedFileStr, sessionMasterKey);
 
-                        // ... keep the rest of your exact media UI rendering code here ...
-                        if (decryptedFileStr.startsWith('data:application/pdf')) {
-                            // ... PDF UI ...
+                        // Render the decrypted media based on its MIME type
+                        if (decryptedFileStr.startsWith('data:image/')) {
+                            // IMAGE: Clickable thumbnail that opens full-size modal
+                            decryptedMediaHTML = `
+                                <div class="mt-2">
+                                    <img src="${decryptedFileStr}" 
+                                        class="rounded shadow-sm" 
+                                        style="max-width: 200px; max-height: 150px; cursor: pointer; border: 2px solid rgba(13, 110, 253, 0.3); transition: transform 0.2s;" 
+                                        onclick="viewFullImage(this.src)" 
+                                        onmouseover="this.style.transform='scale(1.05)'" 
+                                        onmouseout="this.style.transform='scale(1)'"
+                                        title="Click to view full size">
+                                    <br><span class="badge bg-primary bg-opacity-10 text-primary mt-1"><i class="bi bi-image-fill me-1"></i> Photo Attachment</span>
+                                </div>`;
                         } else if (decryptedFileStr.startsWith('data:video/')) {
-                            // ... Video UI ...
+                            // VIDEO: Clickable thumbnail that opens video player modal
+                            decryptedMediaHTML = `
+                                <div class="mt-2">
+                                    <div class="position-relative d-inline-block" style="cursor: pointer;" onclick="viewFullVideo('${decryptedFileStr}')">
+                                        <video src="${decryptedFileStr}" 
+                                            class="rounded shadow-sm" 
+                                            style="max-width: 200px; max-height: 150px; pointer-events: none; border: 2px solid rgba(13, 110, 253, 0.3);" 
+                                            muted></video>
+                                        <div class="position-absolute top-50 start-50 translate-middle">
+                                            <div class="bg-dark bg-opacity-75 rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                                <i class="bi bi-play-fill text-white fs-5"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <br><span class="badge bg-primary bg-opacity-10 text-primary mt-1"><i class="bi bi-camera-video-fill me-1"></i> Video Attachment</span>
+                                </div>`;
+                        } else if (decryptedFileStr.startsWith('data:application/pdf')) {
+                            // PDF: Open in new secure tab
+                            decryptedMediaHTML = `
+                                <div class="mt-2">
+                                    <button class="btn btn-sm btn-outline-primary fw-bold" onclick="openSecureAttachmentFromData('${decryptedFileStr}')" style="border-radius: 8px;">
+                                        <i class="bi bi-file-earmark-pdf-fill me-1 text-danger"></i> View PDF Document
+                                    </button>
+                                    <br><span class="badge bg-danger bg-opacity-10 text-danger mt-1"><i class="bi bi-file-pdf-fill me-1"></i> PDF Attachment</span>
+                                </div>`;
                         } else {
-                            // ... Image UI ...
+                            // ALL OTHER FILES: Download button
+                            decryptedMediaHTML = `
+                                <div class="mt-2">
+                                    <button class="btn btn-sm btn-outline-secondary fw-bold" onclick="openSecureAttachmentFromData('${decryptedFileStr}')" style="border-radius: 8px;">
+                                        <i class="bi bi-file-earmark-arrow-down-fill me-1"></i> Download Attachment
+                                    </button>
+                                    <br><span class="badge bg-secondary bg-opacity-10 text-secondary mt-1"><i class="bi bi-paperclip me-1"></i> File Attachment</span>
+                                </div>`;
                         }
                     } catch (fileErr) {
                         console.error("File decryption failed:", fileErr);
