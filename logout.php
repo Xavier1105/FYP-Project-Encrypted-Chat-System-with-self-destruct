@@ -7,6 +7,7 @@ require_once 'db_connect.php';
 date_default_timezone_set('Asia/Kuala_Lumpur');
 
 // 2. UPDATE: Set Last Seen to NOW() AND turn off Active Session
+$uid = null;
 if (isset($_SESSION['user_id'])) {
     $uid = $_SESSION['user_id'];
 
@@ -41,7 +42,21 @@ if (ini_get("session.use_cookies")) {
 session_destroy();
 
 // =========================================================================
+// 4. Clear localStorage key via JavaScript, then redirect to login
+// =========================================================================
+?>
+<!DOCTYPE html>
+<html>
+<head><title>Logging out...</title></head>
+<body>
+<script>
+    // Clear the private key from localStorage so user must upload it again next login
+    <?php if ($uid): ?>
+        localStorage.removeItem('sentinel_private_key_<?php echo $uid; ?>');
+    <?php endif; ?>
 
-// 4. Redirect back to login
-header("Location: login.php");
-exit();
+    // Redirect to login page
+    window.location.replace('login.php');
+</script>
+</body>
+</html>

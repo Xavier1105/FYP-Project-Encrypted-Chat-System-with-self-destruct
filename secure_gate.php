@@ -183,11 +183,41 @@ $is_brand_new_user = empty($user_data['public_key']) ? 'true' : 'false';
             `;
 
             // Automatically generate their first set of keys!
-            generateAndStoreKeys().then(() => {
-                // Once generated, send them to the dashboard!
+            generateAndStoreKeys().then(async () => {
+                // Get the generated keys from localStorage
+                const newPrivKey = localStorage.getItem(PRIV_KEY_NAME);
+                const newPubKey = await generatePublicKeyFromPrivate(newPrivKey);
+
+                // AUTO-DOWNLOAD: Create and trigger the .json backup download
+                const backupData = JSON.stringify({
+                    private_key: newPrivKey,
+                    public_key: newPubKey,
+                    generated_at: new Date().toISOString()
+                }, null, 2);
+
+                const blob = new Blob([backupData], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Sentinel_Security_Key_${MY_USERNAME}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                // Update UI to show download success
+                document.getElementById('loadingUi').innerHTML = `
+                    <i class="bi bi-check-circle-fill text-success display-1 mb-3"></i>
+                    <h5 class="fw-bold text-success">Keys Generated & Backup Downloaded!</h5>
+                    <p class="text-white-50 small">Your Security Key has been saved as <strong>Sentinel_Security_Key_${MY_USERNAME}.json</strong>.<br>Keep this file safe — you will need it every time you log in.</p>
+                    <div class="spinner-border spinner-border-sm text-primary mt-2" role="status"></div>
+                    <p class="text-white-50 small mt-1">Redirecting to Sentinel...</p>
+                `;
+
+                // Once generated & downloaded, send them to the dashboard!
                 setTimeout(() => {
                     window.location.replace('index.php');
-                }, 1000);
+                }, 2500);
             });
 
         } else {

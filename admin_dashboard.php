@@ -1498,6 +1498,113 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
             videoModal.show();
             videoEl.play();
         }
+        /**
+         * Renders audit media HTML for both encrypted (data URL) and direct (file path) attachments.
+         * @param {string} src - Either a data:URL (decrypted) or a file path (direct)
+         * @param {boolean} isDataUrl - true if src is a data:URL, false if it's a file path
+         */
+        function renderAuditMediaHTML(src, isDataUrl) {
+            let fileType = '';
+
+            if (isDataUrl) {
+                // Detect type from data URL prefix
+                if (src.startsWith('data:image/')) fileType = 'image';
+                else if (src.startsWith('data:video/')) fileType = 'video';
+                else if (src.startsWith('data:application/pdf')) fileType = 'pdf';
+                else fileType = 'other';
+            } else {
+                // Detect type from file extension
+                const ext = src.split('.').pop().toLowerCase();
+                if (['jpg','jpeg','png','gif','webp','bmp','svg'].includes(ext)) fileType = 'image';
+                else if (['mp4','webm','mov','avi','mkv'].includes(ext)) fileType = 'video';
+                else if (ext === 'pdf') fileType = 'pdf';
+                else fileType = 'other';
+            }
+
+            if (fileType === 'image') {
+                return `
+                    <div class="mt-2">
+                        <img src="${src}" 
+                            class="rounded shadow-sm" 
+                            style="max-width: 200px; max-height: 150px; cursor: pointer; border: 2px solid rgba(13, 110, 253, 0.3); transition: transform 0.2s;" 
+                            onclick="viewFullImage(this.src)" 
+                            onmouseover="this.style.transform='scale(1.05)'" 
+                            onmouseout="this.style.transform='scale(1)'"
+                            title="Click to view full size">
+                        <br><span class="badge bg-primary bg-opacity-10 text-primary mt-1"><i class="bi bi-image-fill me-1"></i> Photo Attachment</span>
+                    </div>`;
+            } else if (fileType === 'video') {
+                if (isDataUrl) {
+                    return `
+                        <div class="mt-2">
+                            <div class="position-relative d-inline-block" style="cursor: pointer;" onclick="viewFullVideo('${src}')">
+                                <video src="${src}" 
+                                    class="rounded shadow-sm" 
+                                    style="max-width: 200px; max-height: 150px; pointer-events: none; border: 2px solid rgba(13, 110, 253, 0.3);" 
+                                    muted></video>
+                                <div class="position-absolute top-50 start-50 translate-middle">
+                                    <div class="bg-dark bg-opacity-75 rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                        <i class="bi bi-play-fill text-white fs-5"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <br><span class="badge bg-primary bg-opacity-10 text-primary mt-1"><i class="bi bi-camera-video-fill me-1"></i> Video Attachment</span>
+                        </div>`;
+                } else {
+                    return `
+                        <div class="mt-2">
+                            <div class="position-relative d-inline-block" style="cursor: pointer;" onclick="viewFullVideo('${src}')">
+                                <video src="${src}" 
+                                    class="rounded shadow-sm" 
+                                    style="max-width: 200px; max-height: 150px; pointer-events: none; border: 2px solid rgba(13, 110, 253, 0.3);" 
+                                    muted preload="metadata"></video>
+                                <div class="position-absolute top-50 start-50 translate-middle">
+                                    <div class="bg-dark bg-opacity-75 rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                        <i class="bi bi-play-fill text-white fs-5"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <br><span class="badge bg-info bg-opacity-10 text-info mt-1"><i class="bi bi-camera-video-fill me-1"></i> Video (Direct Access)</span>
+                        </div>`;
+                }
+            } else if (fileType === 'pdf') {
+                if (isDataUrl) {
+                    return `
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-outline-primary fw-bold" onclick="openSecureAttachmentFromData('${src}')" style="border-radius: 8px;">
+                                <i class="bi bi-file-earmark-pdf-fill me-1 text-danger"></i> View PDF Document
+                            </button>
+                            <br><span class="badge bg-danger bg-opacity-10 text-danger mt-1"><i class="bi bi-file-pdf-fill me-1"></i> PDF Attachment</span>
+                        </div>`;
+                } else {
+                    return `
+                        <div class="mt-2">
+                            <a href="${src}" target="_blank" class="btn btn-sm btn-outline-primary fw-bold" style="border-radius: 8px;">
+                                <i class="bi bi-file-earmark-pdf-fill me-1 text-danger"></i> View PDF Document
+                            </a>
+                            <br><span class="badge bg-danger bg-opacity-10 text-danger mt-1"><i class="bi bi-file-pdf-fill me-1"></i> PDF (Direct Access)</span>
+                        </div>`;
+                }
+            } else {
+                if (isDataUrl) {
+                    return `
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-outline-secondary fw-bold" onclick="openSecureAttachmentFromData('${src}')" style="border-radius: 8px;">
+                                <i class="bi bi-file-earmark-arrow-down-fill me-1"></i> Download Attachment
+                            </button>
+                            <br><span class="badge bg-secondary bg-opacity-10 text-secondary mt-1"><i class="bi bi-paperclip me-1"></i> File Attachment</span>
+                        </div>`;
+                } else {
+                    return `
+                        <div class="mt-2">
+                            <a href="${src}" target="_blank" class="btn btn-sm btn-outline-secondary fw-bold" style="border-radius: 8px;">
+                                <i class="bi bi-file-earmark-arrow-down-fill me-1"></i> Download Attachment
+                            </a>
+                            <br><span class="badge bg-secondary bg-opacity-10 text-secondary mt-1"><i class="bi bi-paperclip me-1"></i> File (Direct Access)</span>
+                        </div>`;
+                }
+            }
+        }
 
         // 1. Create a temporary variable to hold the Cold Storage key
         let sessionMasterKey = null;
@@ -1550,65 +1657,25 @@ $chat_req_count = $pending_friends_count + $unread_messages_count;
                 const attachmentPath = buttonElement.getAttribute('data-attachment');
 
                 if (attachmentPath && attachmentPath !== "null" && attachmentPath !== "") {
-                    try {
-                        const res = await fetch(attachmentPath);
-                        const encryptedFileStr = (await res.text()).trim();
-                        // Pass the master key here too!
-                        const decryptedFileStr = await decryptLargeMessage(encryptedFileStr, sessionMasterKey);
+                    // Check if this is an encrypted admin file or a direct (unencrypted) original file
+                    const isEncryptedAdminFile = attachmentPath.includes('admin_enc_') && attachmentPath.endsWith('.txt');
 
-                        // Render the decrypted media based on its MIME type
-                        if (decryptedFileStr.startsWith('data:image/')) {
-                            // IMAGE: Clickable thumbnail that opens full-size modal
-                            decryptedMediaHTML = `
-                                <div class="mt-2">
-                                    <img src="${decryptedFileStr}" 
-                                        class="rounded shadow-sm" 
-                                        style="max-width: 200px; max-height: 150px; cursor: pointer; border: 2px solid rgba(13, 110, 253, 0.3); transition: transform 0.2s;" 
-                                        onclick="viewFullImage(this.src)" 
-                                        onmouseover="this.style.transform='scale(1.05)'" 
-                                        onmouseout="this.style.transform='scale(1)'"
-                                        title="Click to view full size">
-                                    <br><span class="badge bg-primary bg-opacity-10 text-primary mt-1"><i class="bi bi-image-fill me-1"></i> Photo Attachment</span>
-                                </div>`;
-                        } else if (decryptedFileStr.startsWith('data:video/')) {
-                            // VIDEO: Clickable thumbnail that opens video player modal
-                            decryptedMediaHTML = `
-                                <div class="mt-2">
-                                    <div class="position-relative d-inline-block" style="cursor: pointer;" onclick="viewFullVideo('${decryptedFileStr}')">
-                                        <video src="${decryptedFileStr}" 
-                                            class="rounded shadow-sm" 
-                                            style="max-width: 200px; max-height: 150px; pointer-events: none; border: 2px solid rgba(13, 110, 253, 0.3);" 
-                                            muted></video>
-                                        <div class="position-absolute top-50 start-50 translate-middle">
-                                            <div class="bg-dark bg-opacity-75 rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                                <i class="bi bi-play-fill text-white fs-5"></i>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <br><span class="badge bg-primary bg-opacity-10 text-primary mt-1"><i class="bi bi-camera-video-fill me-1"></i> Video Attachment</span>
-                                </div>`;
-                        } else if (decryptedFileStr.startsWith('data:application/pdf')) {
-                            // PDF: Open in new secure tab
-                            decryptedMediaHTML = `
-                                <div class="mt-2">
-                                    <button class="btn btn-sm btn-outline-primary fw-bold" onclick="openSecureAttachmentFromData('${decryptedFileStr}')" style="border-radius: 8px;">
-                                        <i class="bi bi-file-earmark-pdf-fill me-1 text-danger"></i> View PDF Document
-                                    </button>
-                                    <br><span class="badge bg-danger bg-opacity-10 text-danger mt-1"><i class="bi bi-file-pdf-fill me-1"></i> PDF Attachment</span>
-                                </div>`;
-                        } else {
-                            // ALL OTHER FILES: Download button
-                            decryptedMediaHTML = `
-                                <div class="mt-2">
-                                    <button class="btn btn-sm btn-outline-secondary fw-bold" onclick="openSecureAttachmentFromData('${decryptedFileStr}')" style="border-radius: 8px;">
-                                        <i class="bi bi-file-earmark-arrow-down-fill me-1"></i> Download Attachment
-                                    </button>
-                                    <br><span class="badge bg-secondary bg-opacity-10 text-secondary mt-1"><i class="bi bi-paperclip me-1"></i> File Attachment</span>
-                                </div>`;
+                    if (isEncryptedAdminFile) {
+                        // ENCRYPTED FILE: Decrypt using master key (files ≤15MB)
+                        try {
+                            const res = await fetch(attachmentPath);
+                            const encryptedFileStr = (await res.text()).trim();
+                            const decryptedFileStr = await decryptLargeMessage(encryptedFileStr, sessionMasterKey);
+
+                            decryptedMediaHTML = renderAuditMediaHTML(decryptedFileStr, true);
+                        } catch (fileErr) {
+                            console.error("File decryption failed:", fileErr);
+                            decryptedMediaHTML = `<br><span class="badge bg-warning text-dark mt-2">⚠️ Attachment Decryption Failed</span>`;
                         }
-                    } catch (fileErr) {
-                        console.error("File decryption failed:", fileErr);
-                        decryptedMediaHTML = `<br><span class="badge bg-warning text-dark mt-2">⚠️ Attachment Decryption Failed</span>`;
+                    } else {
+                        // DIRECT FILE: Large file stored without encryption (files >15MB)
+                        // Render it directly using the file path
+                        decryptedMediaHTML = renderAuditMediaHTML(attachmentPath, false);
                     }
                 }
 

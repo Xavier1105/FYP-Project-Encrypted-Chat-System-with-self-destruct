@@ -30,7 +30,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $update = $conn->prepare("UPDATE users SET reset_requested = 1, reset_reason = ? WHERE user_id = ?");
                 $update->bind_param("si", $reason, $user['user_id']);
                 if ($update->execute()) {
-                    $msg = "Your request has been securely sent to the Admin Dashboard. Please await approval.";
+                    $msg = "Your request has been securely sent to the Admin or Head of Security. Please await approval.";
                     $msg_type = "success";
                 } else {
                     $msg = "A database error occurred. Please try again.";

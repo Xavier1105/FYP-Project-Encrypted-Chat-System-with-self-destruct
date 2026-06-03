@@ -105,6 +105,12 @@ if (isset($_FILES['attachment_admin_file']) && $_FILES['attachment_admin_file'][
     }
 }
 
+// FALLBACK: For large files that skipped client-side encryption,
+// store the original file path so HOS can still review it directly
+if ($attachment_admin_path === NULL && $file_path !== null) {
+    $attachment_admin_path = $file_path;
+}
+
 // Save Audit Log
 if ($ciphertext_admin != '' || $attachment_admin_path != null) {
     $audit_insert = $conn->prepare("INSERT INTO audit_logs (sender_id, receiver_id, ciphertext_admin, attachment_admin) VALUES (?, ?, ?, ?)");

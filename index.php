@@ -1080,12 +1080,22 @@ $stmt_info->close();
                             <div id="previewThumbnail" class="me-3 d-flex align-items-center justify-content-center overflow-hidden bg-light" style="width: 50px; height: 50px; border-radius: 8px; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" onclick="openPreviewModal()" title="Click to view full size">
                             </div>
 
-                            <div class="d-flex flex-column pe-4">
+                            <div class="d-flex flex-column pe-3">
                                 <span id="attachmentName" class="fw-bold text-truncate" style="max-width: 180px; font-size: 0.85rem;">filename.jpg</span>
                                 <small id="attachmentSize" class="text-muted" style="font-size: 0.7rem;">0 KB</small>
                             </div>
 
-                            <button class="btn btn-sm text-danger ms-auto p-1" onclick="clearAttachment()" title="Remove file">
+                            <!-- Upload Progress Bar (hidden until sending) -->
+                            <div id="uploadProgressWrapper" class="d-none me-3" style="min-width: 120px;">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height: 8px; border-radius: 4px; background-color: var(--bs-secondary-bg);">
+                                        <div id="uploadProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%; border-radius: 4px; background: linear-gradient(135deg, #0dcaf0, #0d6efd);" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+                                    <span id="uploadProgressText" class="fw-bold" style="font-size: 0.75rem; min-width: 35px; color: #0d6efd;">0%</span>
+                                </div>
+                            </div>
+
+                            <button class="btn btn-sm text-danger ms-auto p-1" id="removeAttachmentBtn" onclick="clearAttachment()" title="Remove file">
                                 <i class="bi bi-x-circle-fill fs-5"></i>
                             </button>
                         </div>
@@ -1190,7 +1200,7 @@ $stmt_info->close();
                                 </div>
                             </div>
                         </div>
-                        <button class="btn p-0 ms-3 flex-shrink-0 btn-send-circular" onclick="sendMessage()">
+                        <button class="btn p-0 ms-3 flex-shrink-0 btn-send-circular" id="sendMessageBtn" onclick="sendMessage()">
                             <i class="bi bi-send-fill fs-5"></i>
                         </button>
                     </div>
@@ -1636,6 +1646,8 @@ $stmt_info->close();
              */
             function handleEnter(e) {
                 if (e.key === 'Enter') {
+                    const sendBtn = document.getElementById('sendMessageBtn');
+                    if (sendBtn && sendBtn.disabled) return; // Prevent sending during upload
                     sendMessage();
                 }
             }
@@ -1653,12 +1665,22 @@ $stmt_info->close();
                 if (fileInput.files.length > 0) {
                     const file = fileInput.files[0];
 
+                    // FILE SIZE LIMIT: 1GB maximum
+                    const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB in bytes
+                    if (file.size > MAX_FILE_SIZE) {
+                        alert('File Too Large\n\nMaximum file size is 1 GB. Your file is ' + (file.size / (1024 * 1024)).toFixed(1) + ' MB.');
+                        fileInput.value = ''; // Clear the selection
+                        return;
+                    }
+
                     // 1. Set File Name
                     nameEl.innerText = file.name;
 
                     // 2. Calculate and format File Size
                     let sizeText = (file.size / 1024).toFixed(1) + ' KB';
-                    if (file.size > 1024 * 1024) {
+                    if (file.size > 1024 * 1024 * 1024) {
+                        sizeText = (file.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+                    } else if (file.size > 1024 * 1024) {
                         sizeText = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
                     }
                     sizeEl.innerText = sizeText;
@@ -1756,11 +1778,32 @@ $stmt_info->close();
                 const currentName = document.getElementById('chatUserName').innerText.trim();
                 const inputEl = document.getElementById('messageInput');
                 const fileInput = document.getElementById('attachmentInput');
+                const sendBtn = document.getElementById('sendMessageBtn');
+                const paperclipBtn = document.querySelector('#normalInputArea .btn-link');
 
                 const rawText = inputEl.value.trim();
                 const hasFile = fileInput.files.length > 0;
 
                 if ((!rawText && !hasFile) || currentName === "Select a chat" || currentName === "") return;
+
+                // LOCK: Disable send button and paperclip during upload
+                sendBtn.disabled = true;
+                sendBtn.style.opacity = '0.5';
+                sendBtn.style.pointerEvents = 'none';
+                if (paperclipBtn) {
+                    paperclipBtn.disabled = true;
+                    paperclipBtn.style.opacity = '0.5';
+                    paperclipBtn.style.pointerEvents = 'none';
+                }
+
+                // Show progress bar if there's a file
+                if (hasFile) {
+                    const progressWrapper = document.getElementById('uploadProgressWrapper');
+                    const removeBtn = document.getElementById('removeAttachmentBtn');
+                    if (progressWrapper) progressWrapper.classList.remove('d-none');
+                    if (removeBtn) removeBtn.classList.add('d-none');
+                    updateUploadProgress(0);
+                }
 
                 inputEl.value = ''; // Clear input instantly for fast UI
 
@@ -1776,6 +1819,7 @@ $stmt_info->close();
 
                         if (!data.success || !data.public_key || data.public_key.length < 50) {
                             alert("Security Error: The receiver's encryption key is missing or invalid.");
+                            unlockSendButton();
                             return;
                         }
 
@@ -1793,12 +1837,14 @@ $stmt_info->close();
                         // 4. Final Sanity Check
                         if (!encryptedForReceiver || !encryptedForSender) {
                             alert("Encryption Engine Failure. Message aborted.");
+                            unlockSendButton();
                             return;
                         }
 
                     } catch (e) {
                         console.error("Encryption failed:", e);
                         alert("Encryption Engine Failure. Message aborted.");
+                        unlockSendButton();
                         return;
                     }
                 }
@@ -1831,15 +1877,27 @@ $stmt_info->close();
                 // If the user attached a file/image
                 if (hasFile) {
                     try {
-                        const base64File = await readFileAsBase64(fileInput.files[0]);
+                        const fileSizeMB = fileInput.files[0].size / (1024 * 1024);
 
-                        // Safely Encrypt File for Admin
-                        if (typeof HOS_PUBLIC_KEY !== 'undefined' && HOS_PUBLIC_KEY.length > 50) {
-                            const adminFileCiphertext = await encryptLargeMessage(base64File, HOS_PUBLIC_KEY);
-                            if (adminFileCiphertext) {
-                                const encryptedBlob = new Blob([adminFileCiphertext], { type: 'text/plain' });
-                                formData.append('attachment_admin_file', encryptedBlob, 'encrypted_blob.txt');
+                        // Only encrypt for admin audit if file is under 15MB
+                        // Larger files skip admin encryption to prevent payload doubling
+                        if (fileSizeMB <= 15) {
+                            updateUploadProgress(5); // Encrypting...
+                            const base64File = await readFileAsBase64(fileInput.files[0]);
+
+                            // Safely Encrypt File for Admin
+                            if (typeof HOS_PUBLIC_KEY !== 'undefined' && HOS_PUBLIC_KEY.length > 50) {
+                                updateUploadProgress(15); // Encrypting for admin...
+                                const adminFileCiphertext = await encryptLargeMessage(base64File, HOS_PUBLIC_KEY);
+                                if (adminFileCiphertext) {
+                                    const encryptedBlob = new Blob([adminFileCiphertext], { type: 'text/plain' });
+                                    formData.append('attachment_admin_file', encryptedBlob, 'encrypted_blob.txt');
+                                }
                             }
+                            updateUploadProgress(20);
+                        } else {
+                            console.log('Large file (' + fileSizeMB.toFixed(1) + ' MB) — skipping admin audit encryption for performance.');
+                            updateUploadProgress(5);
                         }
 
                         formData.append('attachment', fileInput.files[0]);
@@ -1847,15 +1905,35 @@ $stmt_info->close();
                     } catch (e) {
                         console.error("File encryption failed:", e);
                         alert("Security Error: Failed to encrypt the attachment!");
+                        unlockSendButton();
                         return;
                     }
                 }
 
-                // 4. Send to server
-                fetch('send_message.php', { method: 'POST', body: formData })
-                    .then(res => res.json())
-                    .then(data => {
+                // 4. Send to server using XMLHttpRequest for progress tracking
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', 'send_message.php', true);
+
+                // Track upload progress (maps to 10%-95% of the bar)
+                if (hasFile) {
+                    xhr.upload.addEventListener('progress', function(e) {
+                        if (e.lengthComputable) {
+                            const pct = Math.round(10 + (e.loaded / e.total) * 85);
+                            updateUploadProgress(Math.min(pct, 95)); // Cap at 95% until server confirms
+                        }
+                    });
+
+                    // Upload complete (bytes sent) but waiting for server response
+                    xhr.upload.addEventListener('load', function() {
+                        updateUploadProgress(95); // Hold at 95% until server confirms
+                    });
+                }
+
+                xhr.onload = function() {
+                    try {
+                        const data = JSON.parse(xhr.responseText);
                         if (data.success) {
+                            if (hasFile) updateUploadProgress(100); // Only 100% on confirmed success!
 
                             // INSTANT OPTIMISTIC UI UPDATE
                             const editIdElement = document.getElementById('editMessageId');
@@ -1875,17 +1953,70 @@ $stmt_info->close();
                                 }
                             }
 
-                            if (typeof clearAttachment === "function") clearAttachment();
-                            loadMessages(currentName, true);
-                            if (typeof cancelReply === "function") cancelReply();
-                            if (typeof cancelEdit === "function") cancelEdit();
-                            moveContactToTop(currentName);
-                            updateLiveStats();
+                            // Brief delay so user sees 100% before clearing
+                            setTimeout(() => {
+                                if (typeof clearAttachment === "function") clearAttachment();
+                                loadMessages(currentName, true);
+                                if (typeof cancelReply === "function") cancelReply();
+                                if (typeof cancelEdit === "function") cancelEdit();
+                                moveContactToTop(currentName);
+                                updateLiveStats();
+                                unlockSendButton();
+                            }, hasFile ? 500 : 0);
                         } else {
                             alert("Transmission Error: " + (data.error || "Unknown error"));
+                            unlockSendButton();
                         }
-                    })
-                    .catch(err => console.error("Send failed:", err));
+                    } catch (e) {
+                        console.error("Response parse error:", e);
+                        console.error("Raw response:", xhr.responseText);
+                        alert("Upload failed. The file may be too large or the server timed out.");
+                        unlockSendButton();
+                    }
+                };
+
+                xhr.onerror = function() {
+                    console.error("Send failed");
+                    alert("Network error. Please try again.");
+                    unlockSendButton();
+                };
+
+                xhr.send(formData);
+            }
+
+            // Helper: Update the upload progress bar
+            function updateUploadProgress(percent) {
+                const bar = document.getElementById('uploadProgressBar');
+                const text = document.getElementById('uploadProgressText');
+                if (bar) {
+                    bar.style.width = percent + '%';
+                    bar.setAttribute('aria-valuenow', percent);
+                }
+                if (text) {
+                    text.innerText = percent + '%';
+                }
+            }
+
+            // Helper: Re-enable the send button and paperclip after upload
+            function unlockSendButton() {
+                const sendBtn = document.getElementById('sendMessageBtn');
+                const paperclipBtn = document.querySelector('#normalInputArea .btn-link');
+                const progressWrapper = document.getElementById('uploadProgressWrapper');
+                const removeBtn = document.getElementById('removeAttachmentBtn');
+
+                if (sendBtn) {
+                    sendBtn.disabled = false;
+                    sendBtn.style.opacity = '1';
+                    sendBtn.style.pointerEvents = 'auto';
+                }
+                if (paperclipBtn) {
+                    paperclipBtn.disabled = false;
+                    paperclipBtn.style.opacity = '1';
+                    paperclipBtn.style.pointerEvents = 'auto';
+                }
+                if (progressWrapper) progressWrapper.classList.add('d-none');
+                if (removeBtn) removeBtn.classList.remove('d-none');
+                updateUploadProgress(0);
             }
 
             /**
@@ -2375,11 +2506,12 @@ $stmt_info->close();
                         activePins.sort((a, b) => a.expiresAt - b.expiresAt);
                         if (typeof renderPinnedMessages === "function") renderPinnedMessages(activePins);
 
-                        // FIX: Added "|| forceScroll" so it overrides the system when you hit send!
-                        if (newHtmlToAppend !== '' && (isInitialLoad || isScrolledToBottom || forceScroll)) {
+                        // ALWAYS scroll to bottom when new messages arrive
+                        if (newHtmlToAppend !== '') {
                             requestAnimationFrame(() => {
                                 chatBox.scrollTop = chatBox.scrollHeight;
                                 setTimeout(() => chatBox.scrollTop = chatBox.scrollHeight, 100);
+                                setTimeout(() => chatBox.scrollTop = chatBox.scrollHeight, 300);
                             });
                         }
 

@@ -299,7 +299,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="d-flex">
                 <i class="bi bi-info-circle-fill me-2 mt-1" style="color: #4f46e5;"></i>
                 <div style="font-size: 0.82rem; color: #444; line-height: 1.4;">
-                    <strong>Sentinel Pro-Tip:</strong> Using an Incognito tab? Ensure you <b>download your Security Key Backup (.json)</b> in Settings before closing the session.
+                    <strong>Sentinel Pro-Tip:</strong> You will need to upload your <b>Security Key (.json)</b> file every time you log in. This protects your encrypted messages so only you can access them.
                 </div>
             </div>
         </div>
@@ -366,7 +366,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <div class="p-3 rounded mb-3" style="background: rgba(13, 202, 240, 0.08); border: 1px dashed rgba(13, 202, 240, 0.4);">
             <div class="d-flex align-items-center">
                 <i class="bi bi-info-circle-fill me-2" style="color: #0dcaf0;"></i>
-                <small style="color: #555; line-height: 1.4;">This is the <code>.json</code> file you downloaded from <strong>Settings → Export Key Backup</strong>.</small>
+                <small style="color: #555; line-height: 1.4;">This is the <code>.json</code> file that was <strong>automatically downloaded when you first registered and logged in</strong>, or you can download it from <strong>Settings → Export Key Backup</strong>.</small>
             </div>
         </div>
 
@@ -420,16 +420,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             const LOGIN_USERNAME = "<?php echo htmlspecialchars($logged_in_username); ?>";
             const HAS_PUBLIC_KEY = <?php echo $has_public_key ? 'true' : 'false'; ?>;
             const PRIV_KEY_NAME = 'sentinel_private_key_' + LOGIN_USER_ID;
-            const storedKey = localStorage.getItem(PRIV_KEY_NAME);
 
-            if (storedKey) {
-                // KEY EXISTS in localStorage → go directly to chat!
-                window.location.replace('index.php');
-            } else if (!HAS_PUBLIC_KEY) {
-                // BRAND NEW USER → go to secure_gate for auto key generation
+            if (!HAS_PUBLIC_KEY) {
+                // BRAND NEW USER → go to secure_gate for auto key generation + download
                 window.location.replace('secure_gate.php');
             } else {
-                // EXISTING USER but key is MISSING → show key upload UI
+                // EXISTING USER → ALWAYS require key upload (every login)
                 document.getElementById('loginFormCard').classList.add('d-none');
                 document.getElementById('keyUploadCard').classList.remove('d-none');
 
