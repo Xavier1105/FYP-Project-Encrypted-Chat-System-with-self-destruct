@@ -76,8 +76,8 @@ The system balances **secure private communication** between officers with **aut
 - **Compliance Audit Vault** — Encrypted cold storage of all communications
 - **Master Key Decryption** — HOS can decrypt audit logs using physical `.json` key
 - **Media Decryption** — View decrypted photos, videos, PDFs, and documents
-- **Panic Mode** — Emergency data wipe triggered on compromised accounts
-- **Account Suspension** — Instantly revoke an officer's system access
+- **Reset Password & Revoke Access** — Admin can reset user passwords or permanently revoke access
+- **Account Suspension** — Instantly lock or unlock an officer's system access
 
 ---
 
@@ -227,7 +227,7 @@ http://localhost/Sentinel (FYP)/login.php
 | Role | Capabilities |
 |------|-------------|
 | **User** | Chat, send files, self-destruct, bookmark, block/unblock |
-| **Admin / HOS** | All user capabilities + user management, audit vault decryption, panic mode, account lock/unlock |
+| **Admin / HOS** | All user capabilities + user management, audit vault decryption, password reset, access revocation, account lock/unlock |
 
 ---
 
