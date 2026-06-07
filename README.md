@@ -10,10 +10,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.4-blue?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.4.1-blue?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/PHP-7.4+-purple?style=for-the-badge&logo=php&logoColor=white" alt="PHP"/>
   <img src="https://img.shields.io/badge/MySQL-Database-orange?style=for-the-badge&logo=mysql&logoColor=white" alt="MySQL"/>
   <img src="https://img.shields.io/badge/Encryption-RSA%20%2B%20AES-green?style=for-the-badge&logo=letsencrypt&logoColor=white" alt="Encryption"/>
+  <img src="https://img.shields.io/badge/HTTPS-ngrok-blueviolet?style=for-the-badge&logo=ngrok&logoColor=white" alt="ngrok"/>
   <img src="https://img.shields.io/badge/License-Academic-red?style=for-the-badge" alt="License"/>
 </p>
 
@@ -90,6 +91,7 @@ The system balances **secure private communication** between officers with **aut
 | **Database** | MySQL / MariaDB |
 | **Encryption** | Web Crypto API (RSA-OAEP, AES-GCM) |
 | **Server** | Apache (XAMPP) |
+| **HTTPS Tunnel** | ngrok (secure remote access) |
 | **Icons** | Bootstrap Icons |
 
 ---
@@ -128,6 +130,7 @@ Sentinel (FYP)/
 
 ### Prerequisites
 - [XAMPP](https://www.apachefriends.org/) (Apache + MySQL + PHP 7.4+)
+- [ngrok](https://ngrok.com/) (for secure HTTPS tunnel)
 - Modern web browser (Chrome, Edge, or Firefox)
 
 ### Steps
@@ -157,12 +160,52 @@ cp -r FYP-Project-Encrypted-Chat-System-with-self-destruct "C:/xampp/htdocs/Sent
 $conn = new mysqli("localhost", "root", "", "sentinel_db");
 ```
 
-**6. Access the system**
+**6. Access the system locally**
 ```
 http://localhost/Sentinel (FYP)/login.php
 ```
 
 ---
+
+## 🌐 HTTPS Access with ngrok
+
+Sentinel uses the **Web Crypto API** for all browser-side encryption. This API **requires a secure origin (HTTPS)** to function correctly. To access the system from other devices or expose it over the internet securely, use **ngrok** to create a temporary HTTPS tunnel.
+
+### Why ngrok?
+- The Web Crypto API (`window.crypto.subtle`) **only works on HTTPS** or `localhost`
+- ngrok creates an instant `https://` tunnel to your local XAMPP server
+- Allows multiple users to connect from different devices without a dedicated server
+
+### Setup ngrok
+
+**1. Install ngrok**
+
+Download from [https://ngrok.com/download](https://ngrok.com/download) and install it.
+
+**2. Authenticate ngrok**
+```bash
+ngrok config add-authtoken YOUR_AUTH_TOKEN
+```
+Get your token from [https://dashboard.ngrok.com/authtokens](https://dashboard.ngrok.com/authtokens) after signing up.
+
+**3. Start the HTTPS tunnel**
+```bash
+ngrok http 80
+```
+
+**4. Copy the forwarding URL**
+```
+Forwarding  https://xxxx-xxxx-xxxx.ngrok-free.app -> http://localhost:80
+```
+
+**5. Access Sentinel via HTTPS**
+```
+https://xxxx-xxxx-xxxx.ngrok-free.app/Sentinel (FYP)/login.php
+```
+
+> **⚠️ Note:** The ngrok URL changes every time you restart the tunnel (free plan). Share the new URL with users after each restart.
+
+> **💡 Tip:** If you see an ngrok browser warning page, click **"Visit Site"** to continue — this is normal for the free plan.
 
 ## 🔒 Security Architecture
 
@@ -245,6 +288,6 @@ This project was developed as a **Final Year Project (FYP)** for academic purpos
 ---
 
 <p align="center">
-  <b>🛡️ Sentinel v1.4</b><br>
+  <b>🛡️ Sentinel v1.4.1</b><br>
   <i>Secure. Private. Compliant.</i>
 </p>
