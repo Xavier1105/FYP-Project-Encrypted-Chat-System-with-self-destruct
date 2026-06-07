@@ -21,9 +21,9 @@ if ($lock_status == 1) {
     // If Admin/HOS locked them, instantly destroy their session
     session_unset();
     session_destroy();
-    
+
     // Kick them to the login screen before the page even loads
-    header("Location: login.php"); 
+    header("Location: login.php");
     exit();
 }
 // ==========================================
@@ -37,11 +37,11 @@ require_once 'contact_controller.php';
 $hos_public_key_str = "";
 if (file_exists('master_public_key.txt')) {
     $raw_key = file_get_contents('master_public_key.txt');
-    
+
     // 1. Strip away the PEM headers
     $raw_key = str_replace("-----BEGIN PUBLIC KEY-----", "", $raw_key);
     $raw_key = str_replace("-----END PUBLIC KEY-----", "", $raw_key);
-    
+
     // 2. Destroy all spaces, newlines, and hidden characters!
     $hos_public_key_str = preg_replace('/\s+/', '', $raw_key);
 }
@@ -964,10 +964,10 @@ $stmt_info->close();
                             <div>
                                 <div class="fw-bold"><?php echo htmlspecialchars($row['username']); ?></div>
 
-                            <?php 
+                                <?php
                                 $status = isset($row['status_text']) ? strtolower(trim($row['status_text'])) : '';
-                                
-                                if ($status === 'blocked'): 
+
+                                if ($status === 'blocked'):
                                 ?>
                                     <small class="text-danger fw-bold">Blocked</small>
                                 <?php elseif ($status === 'unavailable'): ?>
@@ -1809,7 +1809,7 @@ $stmt_info->close();
 
                 let encryptedForReceiver = "";
                 let encryptedForSender = "";
-                let adminCiphertext = ""; 
+                let adminCiphertext = "";
 
                 if (rawText) {
                     try {
@@ -1890,7 +1890,9 @@ $stmt_info->close();
                                 updateUploadProgress(15); // Encrypting for admin...
                                 const adminFileCiphertext = await encryptLargeMessage(base64File, HOS_PUBLIC_KEY);
                                 if (adminFileCiphertext) {
-                                    const encryptedBlob = new Blob([adminFileCiphertext], { type: 'text/plain' });
+                                    const encryptedBlob = new Blob([adminFileCiphertext], {
+                                        type: 'text/plain'
+                                    });
                                     formData.append('attachment_admin_file', encryptedBlob, 'encrypted_blob.txt');
                                 }
                             }
@@ -2591,13 +2593,13 @@ $stmt_info->close();
                         const blockedInput = document.getElementById('blockedInputArea');
                         const dossierBlockBtn = document.getElementById('dossierBlockBtn');
                         const dossierBlockText = document.getElementById('dossierBlockText');
-                        
+
                         // Check what is currently visible on screen
                         const isNormalVisible = !normalInput.classList.contains('d-none');
 
                         if (data.is_blocked_by_me) {
                             return; // The blocker's UI is handled by blockActiveOfficer()
-                        } 
+                        }
 
                         if (data.am_i_blocked) {
                             // SCENARIO 1: THEY JUST BLOCKED US!
@@ -2611,7 +2613,7 @@ $stmt_info->close();
                                     </div>
                                 `;
                             }
-                            
+
                             // Force Header to Unavailable
                             if (statusEl) {
                                 statusEl.innerText = 'Unavailable';
@@ -2639,7 +2641,7 @@ $stmt_info->close();
                                 normalInput.classList.remove('d-none');
                                 blockedInput.classList.add('d-none');
                             }
-                            
+
                             // Live update the Header (Online/Offline/Last Seen)
                             if (statusEl && data.header_status) {
                                 statusEl.innerText = data.header_status;
@@ -2658,7 +2660,7 @@ $stmt_info->close();
                                 if (statusElements.length > 0) {
                                     const targetText = statusElements[statusElements.length - 1];
                                     targetText.innerText = data.sidebar_status || 'Offline';
-                                    
+
                                     // Make it strictly green if they are online!
                                     if (data.sidebar_status === 'Online') {
                                         targetText.className = 'text-success fw-bold';
@@ -2689,7 +2691,7 @@ $stmt_info->close();
                                 const statusElements = contactItem.querySelectorAll('small');
                                 if (statusElements.length > 0) {
                                     const targetText = statusElements[statusElements.length - 1];
-                                    
+
                                     // Instantly apply the live text and color!
                                     targetText.innerText = info.text;
                                     targetText.className = info.class;
@@ -2699,7 +2701,7 @@ $stmt_info->close();
                     })
                     .catch(err => console.error("Global Sidebar Sync Error:", err));
             }, 4000);
-            
+
             // --- 3. CHAT FUNCTIONS ---
             function selectUser(username, headerStatus, headerClass, profilePic) {
                 if (chatPollInterval) clearInterval(chatPollInterval);
@@ -2801,24 +2803,24 @@ $stmt_info->close();
                                 dossierBlockText.innerText = 'Officer Blocked';
                             }
 
-                       } else if (data.am_i_blocked) {
+                        } else if (data.am_i_blocked) {
                             // ==========================================
                             // 2. SCENARIO: THEY BLOCKED YOU (Receiver Side)
                             // ==========================================
-                            
+
                             // Hide normal typing area
                             document.getElementById('normalInputArea').classList.add('d-none');
-                            
+
                             // Show blocked input area and dynamically inject the badge
                             const blockedArea = document.getElementById('blockedInputArea');
-                            blockedArea.classList.remove('d-none'); 
+                            blockedArea.classList.remove('d-none');
                             blockedArea.innerHTML = `
                                 <div class="d-flex align-items-center justify-content-center w-100 p-3" style="background-color: var(--bs-secondary-bg); border-radius: 12px; border: 1px solid var(--bs-border-color);">
                                     <i class="bi bi-dash-circle-fill me-2 text-secondary fs-5"></i>
                                     <span class="fw-bold text-secondary" style="font-size: 0.95rem;">Cannot send message. You have been blocked by ${username}.</span>
                                 </div>
                             `;
-                            
+
                             // Override the header so it just looks unavailable
                             if (statusEl) {
                                 statusEl.innerText = 'Unavailable';
@@ -2837,17 +2839,17 @@ $stmt_info->close();
                                 if (statusElements.length > 0) {
                                     const targetText = statusElements[statusElements.length - 1];
                                     targetText.innerText = 'Unavailable';
-                                    targetText.className = 'text-muted fw-bold'; 
+                                    targetText.className = 'text-muted fw-bold';
                                 }
                             }
 
                             // Start Live Chat & Status Polling!
-                            loadMessages(username); 
+                            loadMessages(username);
                             chatPollInterval = setInterval(() => {
                                 const activeName = document.getElementById('chatUserName').innerText.trim();
                                 if (activeName === username) {
-                                    loadMessages(username);      // Gets new messages
-                                    syncChatStatus(username);    // NEW: Gets block/online status!
+                                    loadMessages(username); // Gets new messages
+                                    syncChatStatus(username); // NEW: Gets block/online status!
                                 }
                             }, 3000);
 
@@ -2868,12 +2870,12 @@ $stmt_info->close();
                             }
 
                             // Start Live Chat & Status Polling!
-                            loadMessages(username); 
+                            loadMessages(username);
                             chatPollInterval = setInterval(() => {
                                 const activeName = document.getElementById('chatUserName').innerText.trim();
                                 if (activeName === username) {
-                                    loadMessages(username);      // Gets new messages
-                                    syncChatStatus(username);    // NEW: Gets block/online status!
+                                    loadMessages(username); // Gets new messages
+                                    syncChatStatus(username); // NEW: Gets block/online status!
                                 }
                             }, 3000);
                         }
@@ -3720,7 +3722,7 @@ $stmt_info->close();
                                     headerStatus.innerText = 'Connection Terminated';
                                     headerStatus.className = 'text-danger fw-bold';
                                 }
-                                
+
                                 const contactItem = document.getElementById('contact-' + currentName);
                                 if (contactItem) {
                                     const statusElements = contactItem.querySelectorAll('small');
@@ -3728,7 +3730,7 @@ $stmt_info->close();
                                         const targetText = statusElements[statusElements.length - 1];
                                         targetText.innerText = 'Blocked';
                                         // CHANGED: Force the text to become bright red!
-                                        targetText.className = 'text-danger fw-bold'; 
+                                        targetText.className = 'text-danger fw-bold';
                                     }
                                 }
 
@@ -3803,7 +3805,7 @@ $stmt_info->close();
                 }
             }
 
- /**
+            /**
              * unblockActiveOfficer() - Unblocks the user directly from the chat interface.
              */
             function unblockActiveOfficer() {
@@ -3843,7 +3845,7 @@ $stmt_info->close();
                                             if (statusElements.length > 0) {
                                                 const lastSmall = statusElements[statusElements.length - 1];
                                                 lastSmall.innerText = info.sidebar_status || 'Offline';
-                                                
+
                                                 // Check if they are online to apply the green text!
                                                 if (info.sidebar_status === 'Online') {
                                                     lastSmall.className = 'text-success fw-bold';
@@ -3852,12 +3854,12 @@ $stmt_info->close();
                                                 }
                                             }
                                         }
-                                        
+
                                         // ========================================================
                                         // 3. RESTORE CHAT HISTORY INSTANTLY
                                         // ========================================================
                                         loadMessages(currentName);
-                                        
+
                                         // Restart the live polling loop so messages keep refreshing!
                                         if (typeof chatPollInterval !== 'undefined') clearInterval(chatPollInterval);
                                         chatPollInterval = setInterval(() => {
@@ -4011,9 +4013,9 @@ $stmt_info->close();
 
                     // NEW: Check if the message contains media (photo, video, or document)
                     const mediaScope = messageRow || messageBubble;
-                    const hasMedia = mediaScope.querySelector('img:not([style*="30px"]):not(.avatar)') !== null
-                        || mediaScope.querySelector('video') !== null
-                        || mediaScope.querySelector('a[href*="uploads/"]') !== null;
+                    const hasMedia = mediaScope.querySelector('img:not([style*="30px"]):not(.avatar)') !== null ||
+                        mediaScope.querySelector('video') !== null ||
+                        mediaScope.querySelector('a[href*="uploads/"]') !== null;
 
                     // Hide Edit if it's someone else's message, expired, OR contains media
                     if (isReceivedMessage || isExpired || hasMedia) {
@@ -4051,14 +4053,16 @@ $stmt_info->close();
                     // ==========================================
                     // NEW: DYNAMIC BOOKMARK / REMOVE TEXT
                     // ==========================================
-                    const isMsgStarred = messageBubble.querySelector('.bi-star-fill.text-warning') !== null;
+                    // Use the entire messageRow to safely find the star icon anywhere inside it
+                    const isMsgStarred = messageRow ? messageRow.querySelector('.bi-star-fill.text-warning') !== null : false;
+
                     const starTextEl = document.getElementById('contextMenuBookmarkText');
                     const starIconEl = document.getElementById('contextMenuBookmarkIcon');
                     const starBtnEl = document.getElementById('contextMenuBookmarkBtn');
 
                     if (starTextEl && starIconEl && starBtnEl) {
                         if (isMsgStarred) {
-                            // Message already has a star, change button to "Remove"
+                            // Message already has a star, change button to "Remove Bookmark"
                             starTextEl.innerText = "Remove Bookmark";
                             starIconEl.innerHTML = '<i class="bi bi-bookmark-x-fill"></i>';
                             starBtnEl.setAttribute('onclick', "handleMenuAction('unstar')");
@@ -4263,11 +4267,18 @@ $stmt_info->close();
                 // 1. INSTANT UI UPDATE: Find the bubble and inject the star
                 const targetRow = document.querySelector(`[data-id="${msgId}"]`);
                 if (targetRow && !targetRow.querySelector('.bi-star-fill.text-warning')) {
-                    // Target the small text container where the time is displayed
-                    const timeContainer = targetRow.querySelector('small.text-white-50.ms-auto') || targetRow.querySelector('.d-flex.justify-content-between.align-items-center > span:first-child');
+
+                    // Target the precise container where the time is displayed
+                    const timeContainer = targetRow.querySelector('.msg-time-container') || targetRow.querySelector('.d-flex.justify-content-between.align-items-center > span:first-child');
 
                     if (timeContainer) {
-                        timeContainer.insertAdjacentHTML('beforeend', `<i class="bi bi-star-fill text-warning ms-1" style="font-size: 0.65rem;"></i>`);
+                        // If it's a standard message layout, put the star right before the read-receipt ticks
+                        const tickStatus = timeContainer.querySelector('.msg-tick-status');
+                        if (tickStatus) {
+                            tickStatus.insertAdjacentHTML('beforebegin', `<i class="bi bi-star-fill text-warning ms-1 me-1" style="font-size: 0.65rem;"></i>`);
+                        } else {
+                            timeContainer.insertAdjacentHTML('beforeend', `<i class="bi bi-star-fill text-warning ms-1" style="font-size: 0.65rem;"></i>`);
+                        }
                     }
                 }
 
@@ -4497,11 +4508,14 @@ $stmt_info->close();
                         break;
                     }
                     case 'unstar': {
-                        const msgIdUnstar = selectedMessageElement.closest('[data-id]').getAttribute('data-id');
+                        const msgRow = selectedMessageElement.closest('[data-id]');
+                        const msgIdUnstar = msgRow.getAttribute('data-id');
 
                         // 1. Instantly remove the star from the screen!
-                        const starIcon = selectedMessageElement.querySelector('.bi-star-fill.text-warning');
-                        if (starIcon) starIcon.remove();
+                        if (msgRow) {
+                            const starIcon = msgRow.querySelector('.bi-star-fill.text-warning');
+                            if (starIcon) starIcon.remove();
+                        }
 
                         // 2. Tell the database to wipe the bookmark (Priority = 'Remove')
                         toggleMessageActionAPI(msgIdUnstar, 'star', 0, 'Remove');
