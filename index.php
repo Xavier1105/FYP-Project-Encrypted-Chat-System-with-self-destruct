@@ -2474,7 +2474,7 @@ $stmt_info->close();
 
                             if (isReceived) {
                                 newHtmlToAppend += `
-                                    <div class="d-flex mb-3" data-id="${msg.message_id}" data-pinned="${isPinnedData}" data-cipher="${currentCipher}" data-timestamp="${msgTimeMs}">
+                                    <div class="d-flex mb-3" data-id="${msg.message_id}" data-is-received="true" data-pinned="${isPinnedData}" data-cipher="${currentCipher}" data-timestamp="${msgTimeMs}">
                                         <div class="px-3 py-2 shadow-sm d-flex flex-column position-relative" style="max-width: 75%; min-width: 120px; border-radius: 20px; background-color: rgba(0, 0, 0, 0.65); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.05); color: white;">
                                             ${pinBadge}
                                             ${finalBubbleContent}
@@ -2483,7 +2483,7 @@ $stmt_info->close();
                                 `;
                             } else {
                                 newHtmlToAppend += `
-                                    <div class="d-flex justify-content-end mb-3" data-id="${msg.message_id}" data-pinned="${isPinnedData}" data-cipher="${currentCipher}" data-timestamp="${msgTimeMs}">
+                                    <div class="d-flex justify-content-end mb-3" data-id="${msg.message_id}" data-is-received="false" data-pinned="${isPinnedData}" data-cipher="${currentCipher}" data-timestamp="${msgTimeMs}">
                                         <div class="text-white px-3 py-2 shadow-sm d-flex flex-column position-relative" style="max-width: 75%; min-width: 120px; border-radius: 20px; background: linear-gradient(135deg, #0dcaf0, #0d6efd);">
                                             ${pinBadge}
                                             ${finalBubbleContent}
@@ -4002,9 +4002,12 @@ $stmt_info->close();
                     selectedMessageElement = messageBubble;
 
                     // Grab the elements
-                    // Find the actual message row (data-id), then check alignment
+                    // Find the actual message row (data-id), then check data-is-received attribute
                     const messageRow = messageBubble.closest('[data-id]');
-                    const isReceivedMessage = messageRow ? !messageRow.classList.contains('justify-content-end') : true;
+                    // FIX: Use data-is-received attribute for reliable sender detection.
+                    // CSS class detection (.justify-content-end) can fail when clicking nested
+                    // elements like the reply preview box (which also has shadow-sm class).
+                    const isReceivedMessage = messageRow ? messageRow.getAttribute('data-is-received') === 'true' : true;
                     const btnDeleteEveryone = document.getElementById('btnDeleteEveryone');
                     const btnEditMessage = document.getElementById('btnEditMessage');
 
@@ -4416,10 +4419,19 @@ $stmt_info->close();
                         if (editPreviewText.length > 60) editPreviewText = editPreviewText.substring(0, 60) + '...';
                         document.getElementById('editPreviewText').innerHTML = editPreviewText;
 
-                        // 3. Put the text back into the input field!
+                        // 3. Put ONLY the sender's own text into the input field.
+                        // FIX: Use .message-text-body to get only the actual message text,
+                        // excluding the reply quote preview, forward label, timestamps etc.
                         const chatInputEdit = document.getElementById('messageInput');
                         if (chatInputEdit) {
-                            chatInputEdit.value = messageText;
+                            const textBodyEl = selectedMessageElement.querySelector('.message-text-body');
+                            if (textBodyEl) {
+                                // Use the text-only content of the message body (no reply quote)
+                                chatInputEdit.value = textBodyEl.innerText.trim();
+                            } else {
+                                // Fallback: use full messageText if no .message-text-body found
+                                chatInputEdit.value = messageText;
+                            }
                             chatInputEdit.focus();
                         }
 
@@ -4429,6 +4441,7 @@ $stmt_info->close();
                             document.getElementById('editMessageId').value = messageRowEdit.getAttribute('data-id');
                         }
                         break;
+
                     case 'forward': {
                         let fwClone = selectedMessageElement.cloneNode(true);
                         fwClone.querySelectorAll('small, sub, .text-muted, .text-white-50').forEach(el => el.remove());
@@ -4611,6 +4624,14 @@ $stmt_info->close();
 
                 if (!targetUser) {
                     alert("Please enter a username to forward to!");
+                    return;
+                }
+
+                // Block self-forwarding — sender cannot forward a message to themselves
+                if (targetUser.toLowerCase() === MY_USERNAME.toLowerCase()) {
+                    alert("⚠️ You cannot forward a message to yourself.");
+                    document.getElementById('forwardContactInput').value = '';
+                    document.getElementById('forwardContactInput').focus();
                     return;
                 }
 
@@ -5562,6 +5583,7 @@ $stmt_info->close();
             // E2EE System Variables
             const HAS_PUBLIC_KEY = <?php echo $has_public_key; ?>;
             const MY_USER_ID = <?php echo $_SESSION['user_id']; ?>;
+            const MY_USERNAME = "<?php echo addslashes($my_username); ?>";
             const MY_PUBLIC_KEY = "<?php echo isset($my_public_key_str) ? $my_public_key_str : (isset($key_res['public_key']) ? $key_res['public_key'] : ''); ?>";
             const HOS_PUBLIC_KEY = "<?php echo $hos_public_key_str; ?>";
         </script>
