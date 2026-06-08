@@ -84,7 +84,8 @@ if ($has_file) {
     $file_path = $upload_dir . $unique_name;
 
     if (!move_uploaded_file($_FILES['attachment']['tmp_name'], $file_path)) {
-        die(json_encode(['success' => false, 'error' => 'File upload failed']));
+        $upload_error_code = $_FILES['attachment']['error'] ?? 'unknown';
+        die(json_encode(['success' => false, 'error' => 'File upload failed. PHP error code: ' . $upload_error_code]));
     }
 }
 

@@ -1784,6 +1784,10 @@ $stmt_info->close();
                 const rawText = inputEl.value.trim();
                 const hasFile = fileInput.files.length > 0;
 
+                // FIX: Capture the File object immediately before any async operations.
+                // After awaits (text encryption), fileInput.files[] can become stale in some browsers.
+                const selectedFile = hasFile ? fileInput.files[0] : null;
+
                 if ((!rawText && !hasFile) || currentName === "Select a chat" || currentName === "") return;
 
                 // LOCK: Disable send button and paperclip during upload
@@ -1875,15 +1879,16 @@ $stmt_info->close();
                 formData.append('destruct_timer', timerValue);
 
                 // If the user attached a file/image
-                if (hasFile) {
+                if (hasFile && selectedFile) {
                     try {
-                        const fileSizeMB = fileInput.files[0].size / (1024 * 1024);
+                        // FIX: Use the pre-captured selectedFile instead of re-reading fileInput.files[0]
+                        const fileSizeMB = selectedFile.size / (1024 * 1024);
 
                         // Only encrypt for admin audit if file is under 15MB
                         // Larger files skip admin encryption to prevent payload doubling
                         if (fileSizeMB <= 15) {
                             updateUploadProgress(5); // Encrypting...
-                            const base64File = await readFileAsBase64(fileInput.files[0]);
+                            const base64File = await readFileAsBase64(selectedFile);
 
                             // Safely Encrypt File for Admin
                             if (typeof HOS_PUBLIC_KEY !== 'undefined' && HOS_PUBLIC_KEY.length > 50) {
@@ -1902,7 +1907,8 @@ $stmt_info->close();
                             updateUploadProgress(5);
                         }
 
-                        formData.append('attachment', fileInput.files[0]);
+                        // FIX: Use pre-captured selectedFile reference — guaranteed valid
+                        formData.append('attachment', selectedFile);
 
                     } catch (e) {
                         console.error("File encryption failed:", e);
