@@ -11,3 +11,8 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+
+# Security Keys — NEVER commit private keys!
+*.json
+!package.json
+!composer.json
